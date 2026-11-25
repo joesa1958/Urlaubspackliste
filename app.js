@@ -3,7 +3,8 @@
 
 const DROPBOX_APP_KEY = '9wwhq5jwa3tjcf4';
 const DATA_PATH = '/urlaubspackliste.json';
-const SOURCE_PATH = '/listen.json'; // Wohnmobil-Checkliste: einmalige Übernahme der „Packliste unsere Sachen“
+const SOURCE_PATH = '/listen.json';
+const TPL = 'vorlage'; // Vorlage für neue Listen: liegt bei den Listen, gehört zu keiner Gruppe (daher nicht in der Übersicht) // Wohnmobil-Checkliste: einmalige Übernahme der „Packliste unsere Sachen“
 const LS = 'urlaub.';
 
 /* ---------- Hilfen ---------- */
@@ -201,9 +202,21 @@ function applyOp(doc, op) {
       const L = doc.lists[op.l]; if (L && !allItems(L).length) L.sections = JSON.parse(JSON.stringify(op.sections));
       doc.seeded[op.key] = true; return;
     }
+    case 'initTemplate': { // einmalig: Vorlage anlegen, alle Punkte abgewählt
+      doc.seeded = doc.seeded || {}; if (doc.seeded[op.key] || doc.lists[TPL]) { doc.seeded[op.key] = true; return; }
+      doc.lists[TPL] = { name: 'Vorlage', icon: 'list', color: 'grau', done: 'Alles gepackt!', lastDone: null,
+        sections: JSON.parse(JSON.stringify(op.sections)).map(x => ({ ...x, items: x.items.map(it => ({ ...it, sel: false })) })) };
+      if (!doc.lists[TPL].sections.length) doc.lists[TPL].sections.push({ id: 's-' + TPL, title: '', items: [] });
+      doc.seeded[op.key] = true; return;
+    }
     case 'addList': {
       if (doc.lists[op.list.id]) return;
       doc.lists[op.list.id] = newList(op.list.id, op.list.name, op.list.icon);
+      const T = op.fromTpl && doc.lists[TPL];
+      if (T && allItems(T).length) { // neue Liste als Kopie der Vorlage, alle Punkte abgewählt
+        doc.lists[op.list.id].sections = T.sections.map((x, si) => ({ id: `${op.list.id}-s${si}`, title: x.title,
+          items: x.items.map((it, n) => ({ ...JSON.parse(JSON.stringify(it)), id: `${op.list.id}-${si}-${n}`, sel: false })) }));
+      }
       (grp(op.g) || doc.groups[doc.groups.length - 1]).lists.push(op.list.id); return;
     }
     case 'dupList': {
@@ -400,7 +413,21 @@ async function dbxUpload(doc, rev) {
   const j = await r.json(); return { rev: j.rev };
 }
 
-let syncTimer = null, syncing = null, syncAgain = false, importing = false;
+let syncTimer = null, syncing = null, syncAgain = false, importing = false, templating = false;
+async function maybeTemplate() {
+  if (templating || !connected() || view.lists[TPL] || (view.seeded && view.seeded['template'])) return;
+  templating = true;
+  try {
+    let src = null; try { src = await dbxDownload(SOURCE_PATH); } catch (e) {}
+    let S = src && src.data && src.data.lists && src.data.lists.sachen;
+    if (!S || !allItems(S).length) { const first = view.groups[0] && view.lists[view.groups[0].lists[0]]; S = first; }
+    if (!S) return;
+    const sections = S.sections.filter(x => x.items.length).map((x, si) => ({ id: `${TPL}-s${si}`, title: x.title || '',
+      items: x.items.map((it, n) => ({ ...it, id: `${TPL}-${si}-${n}` })) }));
+    if (view.lists[TPL]) return;
+    commit({ t: 'initTemplate', key: 'template', sections });
+  } catch (e) {} finally { templating = false; }
+}
 /* Einmalig die „Packliste unsere Sachen“ aus der Wohnmobil-Checkliste in die erste Liste übernehmen */
 async function maybeImport() {
   if (importing || !connected() || (view.seeded && view.seeded['import-sachen'])) return;
@@ -444,7 +471,7 @@ async function sync(manual) {
         if (!store.pending.length) break;
       }
       store.lastSync = Date.now(); store.status = 'ok'; store.error = '';
-      setTimeout(maybeImport, 0);
+      setTimeout(maybeImport, 0); setTimeout(maybeTemplate, 50);
     } catch (e) {
       store.status = navigator.onLine === false ? 'offline' : 'err';
       store.error = e.message || String(e);
@@ -679,7 +706,7 @@ function vEdit(id) {
       ${itemMenu === it.id ? `<div class="picker">
         <button class="secondary" style="min-height:44px" data-act="dupItem" data-i="${it.id}">Hier duplizieren</button>
         <div class="pickhead">In andere Liste kopieren</div>
-        <div class="copyto">${view.groups.flatMap(g => g.lists).filter(x => x !== id).map(meta).filter(Boolean).map(l => `<button data-act="copyItem" data-i="${it.id}" data-to="${l.id}">${listIcon(l.icon, l.color)}<span>${esc(l.name)}</span></button>`).join('')}</div>
+        <div class="copyto">${[...view.groups.flatMap(g => g.lists), ...(view.lists[TPL] ? [TPL] : [])].filter(x => x !== id).map(meta).filter(Boolean).map(l => `<button data-act="copyItem" data-i="${it.id}" data-to="${l.id}">${listIcon(l.icon, l.color)}<span>${esc(l.name)}</span></button>`).join('')}</div>
         <button class="textbtn strong" style="align-self:flex-end" data-act="itemMenu" data-i="${it.id}">Fertig</button>
       </div>` : ''}
       ${itemPick === it.id ? `<div class="picker"><div class="pickhead">Symbol für diesen Punkt</div>
@@ -693,8 +720,10 @@ function vEdit(id) {
     </div></section>`).join('');
   return `<div class="screen">
     <header class="top">
-      <div class="bar"><a class="back" href="#/liste/${id}">${I.back}Check</a><div class="icons">${refreshBtn()}<a class="iconbtn" href="#/liste/${id}/auswahl" aria-label="Auswahl">${I.select}</a><a class="textbtn strong" href="#/liste/${id}">Fertig</a></div></div>
-      <h1>${esc(m.name)} bearbeiten</h1>
+      ${id === TPL ? `<div class="bar"><a class="back" href="#/listen">${I.back}Listen</a><div class="icons">${refreshBtn()}<a class="textbtn strong" href="#/listen">Fertig</a></div></div>
+      <h1>Vorlage bearbeiten</h1><div class="sub">Neue Listen starten als Kopie davon.</div>`
+      : `<div class="bar"><a class="back" href="#/liste/${id}">${I.back}Packen</a><div class="icons">${refreshBtn()}<a class="iconbtn" href="#/liste/${id}/auswahl" aria-label="Auswahl">${I.select}</a><a class="textbtn strong" href="#/liste/${id}">Fertig</a></div></div>
+      <h1>${esc(m.name)} bearbeiten</h1>`}
     </header>
     <main class="content">${secs}
       <button class="dashed" data-act="addSection">Abschnitt hinzufügen</button>
@@ -744,6 +773,10 @@ function vLists() {
     </header>
     <main class="content">${groups}
       <button class="dashed" data-act="addGroup">Gruppe hinzufügen</button>
+      ${view.lists[TPL] ? `<section class="group"><div class="grouphead"><span class="grouptitle">Vorlage für neue Listen</span></div>
+        <div class="card"><a class="row" href="#/liste/${TPL}/bearbeiten">${listIcon('list', 'grau')}
+          <span class="listtext"><span class="listname">Vorlage</span><span class="liststat">${allItems(view.lists[TPL]).length} Punkte · erscheint nicht in der Übersicht</span></span>${I.chev}</a></div>
+        <p class="hint">Jede neue Liste startet als Kopie der Vorlage, mit allen Punkten abgewählt. Danach wählt ihr aus, was mitkommt.</p></section>` : ''}
       <p class="hint">Namen direkt antippen und ändern. Symbol antippen, um Symbol und Farbe zu wählen. Das Kopier-Symbol dupliziert eine Liste mit allen Punkten. Listen am Griff rechts in eine andere Reihenfolge oder Gruppe ziehen. Gruppen mit den Pfeilen verschieben.</p>
     </main>
     <a class="foot" href="#/einstellungen" data-status></a>
@@ -992,8 +1025,10 @@ document.addEventListener('submit', async e => {
   const f = e.target, r = route();
   if (f.dataset.act === 'addList') {
     const inp = f.querySelector('input'), name = inp.value.trim(); if (!name) return;
-    commit({ t: 'addList', g: f.dataset.s, list: { id: 'l-' + uid(), name, icon: 'list' } });
-    const again = document.querySelector(`form.addrow[data-s="${f.dataset.s}"] input`); if (again) again.focus();
+    const nid = 'l-' + uid(), T = view.lists[TPL], fromTpl = !!(T && allItems(T).length);
+    commit({ t: 'addList', g: f.dataset.s, list: { id: nid, name, icon: fromTpl ? 'suitcase' : 'list' }, fromTpl });
+    if (fromTpl) { inp.blur(); location.hash = `#/liste/${nid}/auswahl`; toast('Aus der Vorlage angelegt – jetzt auswählen, was mitkommt'); }
+    else { const again = document.querySelector(`form.addrow[data-s="${f.dataset.s}"] input`); if (again) again.focus(); }
   } else if (f.dataset.act === 'addItem') {
     const inp = f.querySelector('input'), text = inp.value.trim(); if (!text) return;
     const sid = f.dataset.s;
@@ -1068,7 +1103,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
