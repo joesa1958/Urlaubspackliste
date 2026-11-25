@@ -542,7 +542,7 @@ function vHome() {
     const rows = gr.lists.map(meta).filter(Boolean).map(l => {
       const L = view.lists[l.id]; const items = allItems(L);
       const st = runState(l.id);
-      let stat = items.length ? `${items.length} Punkt${items.length === 1 ? '' : 'e'}` + (st.total < items.length ? ` · ${st.total} gewählt` : '') : 'noch leer';
+      let stat = !items.length ? 'noch leer' : st.total ? `${st.total} Punkt${st.total === 1 ? '' : 'e'}` : 'noch nichts ausgewählt';
       if (st.started && st.rest.length) stat = `${st.doneCount} von ${st.total} eingepackt`;
       else if (L.lastDone && items.length) stat = `zuletzt gepackt: ${fmtDate(L.lastDone)}`;
       return `<a class="row" href="#/liste/${l.id}" data-act="openList" data-l="${l.id}">
@@ -1103,7 +1103,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
