@@ -588,7 +588,7 @@ function vRun(id) {
     const x = st.seq[ci + o];
     if (!x) return `<div class="wslot ${cls[o]}" aria-hidden="true"></div>`;
     const b = st.byId[x], d = st.done.has(x), ic = b.it.icon && I[b.it.icon];
-    if (o === 0) return `<div class="wslot w0">${ic ? `<span class="wicon" aria-hidden="true">${I[b.it.icon]}</span>` : ''}<span class="wtext">${esc(b.it.text)}</span></div>`;
+    if (o === 0) return `<div class="wslot w0">${ic ? `<span class="wicon" aria-hidden="true">${I[b.it.icon]}</span>` : ''}<span class="wtext">${esc(b.it.text)}</span>${b.it.note ? `<span class="explain wnote">${esc(b.it.note)}</span>` : ''}${b.it.resp ? `<span class="resp wresp">Zuständig: ${chip(b.it.resp)}</span>` : ''}</div>`;
     return `<button class="wslot ${cls[o]} ${d ? 'isdone' : ''}" data-act="wheelJump" data-i="${x}" aria-label="${esc(b.it.text)}${d ? ' (eingepackt)' : ''}">${d ? `<span class="wtick">${I.tick(16, 'currentColor', 2.4)}</span>` : ''}<span class="wtext">${esc(b.it.text)}</span></button>`;
   }).join('');
   return `<div class="screen"><div class="run">${head(`<span class="count" style="padding:0 6px">${st.doneCount} / ${st.total}</span>`)}
@@ -596,8 +596,6 @@ function vRun(id) {
     <div class="current wheelwrap">
       ${multiSec ? `<button class="secpill" data-act="secPick">${esc(cs || m.name)} <span aria-hidden="true">▾</span></button>` : ''}
       <div class="wheel${shift ? ' roll' : ''}" style="--from:${shift * 46}px">${slots}</div>
-      ${cur.it.note ? `<div class="explain wnote">${esc(cur.it.note)}</div>` : ''}
-      ${cur.it.resp ? `<div class="resp wresp">Zuständig: ${chip(cur.it.resp)}</div>` : ''}
     </div>
     <button class="done-btn" data-act="runDone" data-i="${cur.it.id}">${I.tick(22, '#fff', 2)} Eingepackt</button>
     <div class="runlinks">
@@ -1033,7 +1031,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 2;
+const APP_VERSION = 3;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
