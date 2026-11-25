@@ -681,7 +681,9 @@ function vSelect(id) {
 
 function vEdit(id) {
   const m = meta(id), L = view.lists[id];
-  const secs = L.sections.map((s, si) => `<section class="group" data-s="${s.id}">
+  const filt = id !== TPL; // normale Liste: nur gewählte Punkte bearbeiten, Rest unten „aus der Vorlage“
+  const shown = s => filt ? s.items.filter(isSel) : s.items;
+  const secs = L.sections.filter(s => !filt || !s.items.length || shown(s).length).map((s, si) => `<section class="group" data-s="${s.id}">
     <div class="grouphead">
       <input class="sectitle" data-act="secTitle" data-s="${s.id}" value="${esc(s.title)}" placeholder="${L.sections.length > 1 ? 'Abschnitt benennen' : 'Abschnitt (optional)'}" aria-label="Name des Abschnitts" enterkeyhint="done">
       ${L.sections.length > 1 ? `<button class="smallbtn" data-act="delSection" data-s="${s.id}">Abschnitt löschen</button>` : ''}
@@ -694,8 +696,9 @@ function vEdit(id) {
       <button class="textbtn" data-act="delSectionCancel">Abbrechen</button>
     </div>` : ''}
     <div class="card"><ul class="items" data-s="${s.id}">
-      ${s.items.map(it => `<li data-i="${it.id}"><div class="erow">
-        <button class="minus" data-act="delItem" data-i="${it.id}" aria-label="Punkt löschen"><span></span></button>
+      ${shown(s).map(it => `<li data-i="${it.id}"><div class="erow">
+        ${filt ? `<button class="minus" data-act="unselItem" data-i="${it.id}" aria-label="„${esc(it.text)}“ aus dieser Liste nehmen"><span></span></button>`
+          : `<button class="minus" data-act="delItem" data-i="${it.id}" aria-label="Punkt löschen"><span></span></button>`}
         <button class="ipick ${it.icon ? '' : 'none'}" data-act="pickItemIcon" data-i="${it.id}" aria-label="Symbol für diesen Punkt">${it.icon && I[it.icon] ? I[it.icon] : '+'}</button>
         <div class="etext"><textarea rows="1" data-act="itemText" data-i="${it.id}" aria-label="Punkt umbenennen" enterkeyhint="done">${esc(it.text)}</textarea>
           <textarea rows="1" class="note" data-act="itemNote" data-i="${it.id}" aria-label="Erklärung zu „${esc(it.text)}“" placeholder="Erklärung …">${esc(it.note || '')}</textarea></div>
@@ -727,13 +730,29 @@ function vEdit(id) {
     </header>
     <main class="content">${secs}
       <button class="dashed" data-act="addSection">Abschnitt hinzufügen</button>
+      ${filt ? reserveHtml(id) : ''}
       <p class="hint">Das Feld links vor einem Punkt wählt ein Symbol, das Kopier-Symbol rechts dupliziert den Punkt oder kopiert ihn in eine andere Liste. Unter jedem Punkt kann eine Erklärung stehen – sie erscheint beim Prüfen unter dem Stichwort. Zuständigkeit: Feld antippen wechselt zwischen Jörg, Anne, Beide und niemand. Reihenfolge: rechts am Griff ziehen. Änderungen werden sofort gespeichert.</p>
     </main>
     <a class="foot" href="#/einstellungen" data-status></a>
   </div>`;
 }
 
-let iconPick = null, itemPick = null, itemMenu = null;
+let iconPick = null, itemPick = null, itemMenu = null, reserveOpen = false;
+/* Weitere Punkte: abgewählte Punkte dieser Liste und Punkte der Vorlage, die hier noch fehlen */
+function reserveHtml(id) {
+  const L = view.lists[id], T = id !== TPL && view.lists[TPL];
+  const have = new Set(allItems(L).map(it => it.text.trim().toLowerCase()));
+  const bySec = new Map(); const put = (title, row) => { const k = title || ''; if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(row); };
+  L.sections.forEach(s => s.items.filter(it => !isSel(it)).forEach(it => put(s.title, { act: 'selItem', i: it.id, it })));
+  if (T) T.sections.forEach(s => s.items.filter(it => !have.has(it.text.trim().toLowerCase())).forEach(it => put(s.title, { act: 'addFromTpl', i: it.id, it })));
+  const n = [...bySec.values()].reduce((a, r) => a + r.length, 0);
+  if (!n) return '';
+  return `<section class="group reserve"><button class="reservehead" data-act="reserveToggle">
+      <span>Aus der Vorlage hinzufügen <span class="rcount">${n}</span></span><span aria-hidden="true">${reserveOpen ? '▴' : '▾'}</span></button>
+    ${reserveOpen ? [...bySec.entries()].map(([title, rows]) => `<div class="grouphead"><span class="grouptitle">${esc(title || 'Ohne Abschnitt')}</span></div>
+      <div class="card"><ul>${rows.map(r => `<li><button class="row" data-act="${r.act}" data-i="${r.i}"><span class="plusbtn" aria-hidden="true">+</span>${itemIcon(r.it.icon)}<span class="label">${esc(r.it.text)}</span>${chip(r.it.resp)}</button></li>`).join('')}</ul></div>`).join('') : ''}
+  </section>`;
+}
 function vLists() {
   const groups = view.groups.map((g, gi) => `<section class="group" data-s="${g.id}">
     <div class="grouphead">
@@ -962,6 +981,10 @@ document.addEventListener('click', e => {
     }
     case 'groupUp': commit({ t: 'moveGroup', g: el.dataset.g, dir: -1 }); break;
     case 'groupDown': commit({ t: 'moveGroup', g: el.dataset.g, dir: 1 }); break;
+    case 'reserveToggle': reserveOpen = !reserveOpen; render(); break;
+    case 'unselItem': { const f = findItem(view.lists[id], el.dataset.i); if (f) { commit({ t: 'editItem', l: id, i: f.item.id, patch: { sel: false } }); toast(`„${f.item.text}“ herausgenommen – unten wieder hinzufügbar`); } break; }
+    case 'selItem': { const f = findItem(view.lists[id], el.dataset.i); if (f) { commit({ t: 'editItem', l: id, i: f.item.id, patch: { sel: true } }); toast(`„${f.item.text}“ hinzugefügt`); } break; }
+    case 'addFromTpl': { const f = findItem(view.lists[TPL], el.dataset.i); if (f) { commit({ t: 'copyItem', l: TPL, i: f.item.id, to: id, id: 'i-' + uid() }); toast(`„${f.item.text}“ hinzugefügt`); } break; }
     case 'delItem': {
       const f = findItem(view.lists[id], el.dataset.i);
       if (f && (!f.item.text || confirm(`„${f.item.text}“ löschen?`))) commit({ t: 'delItem', l: id, i: f.item.id });
@@ -1103,7 +1126,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 10;
+const APP_VERSION = 11;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
