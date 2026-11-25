@@ -257,6 +257,7 @@ function applyOp(doc, op) {
     case 'selectAll': L.sections.forEach(s => s.items.forEach(it => { it.sel = op.val; })); break;
     case 'lastDone': L.lastDone = op.date; break;
     case 'renameList': L.name = op.name; break;
+    case 'setDate': if (op.date) L.date = op.date; else delete L.date; break;
     case 'setIcon': L.icon = op.icon; break;
     case 'setColor': L.color = op.color; break;
     case 'seedIcons': {
@@ -495,6 +496,16 @@ function runState(id) {
 }
 function resetRun(id) { delete runs[id]; saveRuns(); }
 
+/* Abreisedatum: rechts in der Listenzeile, mit „in x Tagen“ */
+const WTAGE = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
+function dateBadge(iso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const [y, mo, d] = iso.split('-').map(Number), dt = new Date(y, mo - 1, d), now = new Date();
+  const days = Math.round((dt - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
+  const rel = days === 0 ? 'heute' : days === 1 ? 'morgen' : days > 1 ? `in ${days} Tagen` : 'vorbei';
+  return `<span class="ldbadge ${days < 0 ? 'past' : days <= 7 ? 'soon' : ''}"><span class="ldd">${WTAGE[dt.getDay()]} ${d}. ${MONTHS[mo - 1]}</span><span class="ldr">${rel}</span></span>`;
+}
+
 /* Seite 1: Übersicht */
 function vHome() {
   const groups = view.groups.map(gr => {
@@ -507,7 +518,7 @@ function vHome() {
       else if (L.lastDone && items.length) stat = `zuletzt gepackt: ${fmtDate(L.lastDone)}`;
       return `<a class="row" href="#/liste/${l.id}" data-act="openList" data-l="${l.id}">
         ${listIcon(l.icon, l.color)}
-        <span class="listtext"><span class="listname">${esc(l.name)}</span><span class="liststat">${esc(stat)}</span></span>${I.chev}</a>`;
+        <span class="listtext"><span class="listname">${esc(l.name)}</span><span class="liststat">${esc(stat)}</span></span>${dateBadge(L.date)}${I.chev}</a>`;
     }).join('');
     return `<section class="group"><div class="grouphead"><span class="grouptitle">${esc(g)}</span></div><div class="card">${rows || '<div class="empty">Keine Listen in dieser Gruppe</div>'}</div></section>`;
   }).join('');
@@ -698,7 +709,8 @@ function vLists() {
       ${g.lists.map(meta).filter(Boolean).map(l => `<li data-i="${l.id}"><div class="erow">
         <button class="minus" data-act="delList" data-l="${l.id}" aria-label="Liste löschen"><span></span></button>
         <button class="iconpick" data-act="pickIcon" data-l="${l.id}" aria-label="Symbol und Farbe ändern">${listIcon(l.icon, l.color)}</button>
-        <div class="etext"><textarea rows="1" data-act="listName" data-l="${l.id}" aria-label="Liste umbenennen" enterkeyhint="done">${esc(l.name)}</textarea></div>
+        <div class="etext"><textarea rows="1" data-act="listName" data-l="${l.id}" aria-label="Liste umbenennen" enterkeyhint="done">${esc(l.name)}</textarea>
+          <label class="ldate"><span>Abreise</span><input type="date" data-act="listDate" data-l="${l.id}" value="${esc(view.lists[l.id].date || '')}"></label></div>
         <button class="iconbtn small" data-act="dupList" data-l="${l.id}" aria-label="Liste „${esc(l.name)}“ duplizieren">${I.copy}</button>
         <span class="handle" data-drag="${l.id}" aria-hidden="true">${I.handle}</span>
       </div>
@@ -980,6 +992,11 @@ document.addEventListener('submit', async e => {
   }
 });
 document.addEventListener('change', async e => {
+  if (e.target.matches('[data-act="listDate"]')) {
+    const L = view.lists[e.target.dataset.l], v = e.target.value || '';
+    if (L && v !== (L.date || '')) commit({ t: 'setDate', l: e.target.dataset.l, date: v });
+    return;
+  }
   if (e.target.id !== 'importfile') return;
   const file = e.target.files[0]; if (!file) return;
   try {
@@ -1037,7 +1054,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 5;
+const APP_VERSION = 6;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });

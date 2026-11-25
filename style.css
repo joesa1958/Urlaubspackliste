@@ -220,3 +220,10 @@ li.placeholder { background: var(--sel); border-top: 1px solid var(--line2); }
 .wnote { text-align: center; font-size: 17px; }
 .wslot.w0 .wresp { display: flex; justify-content: center; font-size: 15px; }
 .wresp { justify-content: center; }
+.ldbadge { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; text-align: right; }
+.ldd { font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.ldr { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.ldbadge.soon .ldr { color: #E07415; font-weight: 600; }
+.ldbadge.past .ldd, .ldbadge.past .ldr { color: var(--faint); }
+.ldate { min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); padding-bottom: 6px; }
+.ldate input { flex: 1; min-width: 0; max-width: 160px; box-sizing: border-box; font: inherit; font-size: 15px; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--card); min-height: 32px; }
