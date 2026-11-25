@@ -696,7 +696,8 @@ function vEdit(id) {
       <button class="textbtn" data-act="delSectionCancel">Abbrechen</button>
     </div>` : ''}
     <div class="card"><ul class="items" data-s="${s.id}">
-      ${shown(s).map(it => `<li data-i="${it.id}"><div class="erow">
+      ${shown(s).map(it => moveSel ? `<li data-i="${it.id}"><button class="erow mrow ${moveSel.has(it.id) ? 'on' : ''}" data-act="moveToggle" data-i="${it.id}" aria-pressed="${moveSel.has(it.id)}">
+        <span class="mcheck" aria-hidden="true">${moveSel.has(it.id) ? I.tick(16, '#fff', 2.6) : ''}</span>${itemIcon(it.icon)}<span class="label">${esc(it.text)}</span>${chip(it.resp)}</button></li>` : `<li data-i="${it.id}"><div class="erow">
         ${filt ? `<button class="minus" data-act="unselItem" data-i="${it.id}" aria-label="„${esc(it.text)}“ aus dieser Liste nehmen"><span></span></button>`
           : `<button class="minus" data-act="delItem" data-i="${it.id}" aria-label="Punkt löschen"><span></span></button>`}
         <button class="ipick ${it.icon ? '' : 'none'}" data-act="pickItemIcon" data-i="${it.id}" aria-label="Symbol für diesen Punkt">${it.icon && I[it.icon] ? I[it.icon] : '+'}</button>
@@ -708,6 +709,8 @@ function vEdit(id) {
       </div>
       ${itemMenu === it.id ? `<div class="picker">
         <button class="secondary" style="min-height:44px" data-act="dupItem" data-i="${it.id}">Hier duplizieren</button>
+        ${L.sections.length > 1 ? `<div class="pickhead">In Abschnitt verschieben</div>
+        <div class="copyto">${L.sections.filter(x => x.id !== s.id).map(x => `<button data-act="moveOne" data-i="${it.id}" data-s="${x.id}"><span>${esc(x.title || 'Ohne Namen')}</span></button>`).join('')}</div>` : ''}
         <div class="pickhead">In andere Liste kopieren</div>
         <div class="copyto">${[...view.groups.flatMap(g => g.lists), ...(view.lists[TPL] ? [TPL] : [])].filter(x => x !== id).map(meta).filter(Boolean).map(l => `<button data-act="copyItem" data-i="${it.id}" data-to="${l.id}">${listIcon(l.icon, l.color)}<span>${esc(l.name)}</span></button>`).join('')}</div>
         <button class="textbtn strong" style="align-self:flex-end" data-act="itemMenu" data-i="${it.id}">Fertig</button>
@@ -717,9 +720,9 @@ function vEdit(id) {
         <div style="display:flex;justify-content:space-between"><button class="textbtn" data-act="setItemIcon" data-i="${it.id}" data-icon="">Kein Symbol</button><button class="textbtn strong" data-act="pickItemIcon" data-i="${it.id}">Fertig</button></div>
       </div>` : ''}</li>`).join('')}
     </ul>
-    <form class="addrow" data-act="addItem" data-s="${s.id}"><span class="plus" aria-hidden="true">+</span>
+    ${moveSel ? '' : `<form class="addrow" data-act="addItem" data-s="${s.id}"><span class="plus" aria-hidden="true">+</span>
       <label class="sr" for="add-${s.id}">Punkt hinzufügen</label>
-      <input id="add-${s.id}" placeholder="Punkt hinzufügen" enterkeyhint="enter" autocomplete="off"></form>
+      <input id="add-${s.id}" placeholder="Punkt hinzufügen" enterkeyhint="enter" autocomplete="off"></form>`}
     </div></section>`).join('');
   return `<div class="screen">
     <header class="top">
@@ -728,16 +731,22 @@ function vEdit(id) {
       : `<div class="bar"><a class="back" href="#/liste/${id}">${I.back}Packen</a><div class="icons">${refreshBtn()}<a class="iconbtn" href="#/liste/${id}/auswahl" aria-label="Auswahl">${I.select}</a><a class="textbtn strong" href="#/liste/${id}">Fertig</a></div></div>
       <h1>${esc(m.name)} bearbeiten</h1>`}
     </header>
-    <main class="content">${secs}
-      <button class="dashed" data-act="addSection">Abschnitt hinzufügen</button>
-      ${filt ? reserveHtml(id) : ''}
+    <main class="content">
+      ${L.sections.length > 1 && allItems(L).length ? (moveSel ? `<p class="hint" style="margin-top:0">Punkte antippen, die verschoben werden sollen. Dann unten den Ziel-Abschnitt wählen.</p>`
+        : `<button class="movebtn" data-act="moveMode">${I.handle}Mehrere Punkte verschieben</button>`) : ''}
+      ${secs}
+      ${moveSel ? '' : `<button class="dashed" data-act="addSection">Abschnitt hinzufügen</button>
+      ${filt ? reserveHtml(id) : ''}`}
       <p class="hint">Das Feld links vor einem Punkt wählt ein Symbol, das Kopier-Symbol rechts dupliziert den Punkt oder kopiert ihn in eine andere Liste. Unter jedem Punkt kann eine Erklärung stehen – sie erscheint beim Prüfen unter dem Stichwort. Zuständigkeit: Feld antippen wechselt zwischen Jörg, Anne, Beide und niemand. Reihenfolge: rechts am Griff ziehen. Änderungen werden sofort gespeichert.</p>
     </main>
-    <a class="foot" href="#/einstellungen" data-status></a>
+    ${moveSel ? `<div class="bottom movebar">
+      <div class="movehead"><b>${moveSel.size ? `${moveSel.size} Punkt${moveSel.size === 1 ? '' : 'e'} verschieben nach …` : 'Noch nichts ausgewählt'}</b><button class="textbtn" data-act="moveCancel">Abbrechen</button></div>
+      <div class="copyto">${L.sections.map(x => `<button data-act="moveTo" data-s="${x.id}" ${moveSel.size ? '' : 'disabled style="opacity:.45"'}><span>${esc(x.title || 'Ohne Namen')}</span></button>`).join('')}</div>
+    </div>` : `<a class="foot" href="#/einstellungen" data-status></a>`}
   </div>`;
 }
 
-let iconPick = null, itemPick = null, itemMenu = null, reserveOpen = false;
+let iconPick = null, itemPick = null, itemMenu = null, reserveOpen = false, moveSel = null;
 /* Weitere Punkte: abgewählte Punkte dieser Liste und Punkte der Vorlage, die hier noch fehlen */
 function reserveHtml(id) {
   const L = view.lists[id], T = id !== TPL && view.lists[TPL];
@@ -981,6 +990,21 @@ document.addEventListener('click', e => {
     }
     case 'groupUp': commit({ t: 'moveGroup', g: el.dataset.g, dir: -1 }); break;
     case 'groupDown': commit({ t: 'moveGroup', g: el.dataset.g, dir: 1 }); break;
+    case 'moveMode': moveSel = new Set(); itemMenu = null; itemPick = null; render(); break;
+    case 'moveCancel': moveSel = null; render(); break;
+    case 'moveToggle': { const x = el.dataset.i; if (moveSel.has(x)) moveSel.delete(x); else moveSel.add(x); render(); break; }
+    case 'moveTo': {
+      const L = view.lists[id], target = L.sections.find(x => x.id === el.dataset.s); if (!target || !moveSel || !moveSel.size) break;
+      const order = allItems(L).map(it => it.id).filter(x => moveSel.has(x)); // Reihenfolge beibehalten
+      order.forEach(x => commit({ t: 'moveItem', l: id, i: x, s: target.id }));
+      toast(`${order.length} Punkt${order.length === 1 ? '' : 'e'} nach „${target.title || 'Ohne Namen'}“ verschoben`);
+      moveSel = null; render(); break;
+    }
+    case 'moveOne': {
+      const L = view.lists[id], target = L.sections.find(x => x.id === el.dataset.s), f = findItem(L, el.dataset.i); if (!target || !f) break;
+      itemMenu = null; commit({ t: 'moveItem', l: id, i: f.item.id, s: target.id });
+      toast(`„${f.item.text}“ nach „${target.title || 'Ohne Namen'}“ verschoben`); break;
+    }
     case 'reserveToggle': reserveOpen = !reserveOpen; render(); break;
     case 'unselItem': { const f = findItem(view.lists[id], el.dataset.i); if (f) { commit({ t: 'editItem', l: id, i: f.item.id, patch: { sel: false } }); toast(`„${f.item.text}“ herausgenommen – unten wieder hinzufügbar`); } break; }
     case 'selItem': { const f = findItem(view.lists[id], el.dataset.i); if (f) { commit({ t: 'editItem', l: id, i: f.item.id, patch: { sel: true } }); toast(`„${f.item.text}“ hinzugefügt`); } break; }
@@ -1126,7 +1150,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 11;
+const APP_VERSION = 12;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1148,7 +1172,7 @@ async function boot() {
   render();
   sync(); checkUpdate();
 }
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => { moveSel = null; render(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sync(); checkUpdate(); } });
 window.addEventListener('online', () => sync());
 boot();
