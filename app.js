@@ -26,6 +26,10 @@ const fmtTime = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit'
 
 /* ---------- Icons ---------- */
 const I = {
+  sea: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9c1.6 0 1.6-1.5 3.2-1.5S7.3 9 8.9 9s1.6-1.5 3.1-1.5S13.6 9 15.2 9s1.6-1.5 3.1-1.5S19.9 9 21.5 9M2.5 13.5c1.6 0 1.6-1.5 3.2-1.5s1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5M2.5 18c1.6 0 1.6-1.5 3.2-1.5s1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  beach: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 0 1 15.5-2.8zM11.8 9.7 15 20M3 20.5c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  boat: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M12 4l6.5 10H12M10 6.5 5.5 14H10M3.5 17.5h17l-2 3h-13zM3 21.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  palm: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9.5c0 4 .8 8 1.8 11.5M12 9.5C10 6 6.5 5.5 4 7c2.5-.2 4.5.5 5.5 2M12 9.5c2-3.5 5.5-4 8-2.5-2.5-.2-4.5.5-5.5 2M12 9.5C11 6 12.5 3.5 15 3M12 9.5c-1.5-2.5-4-3.5-6.5-3M7 21h11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   suitcase: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="7" width="16" height="12.5" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 7V5.2A1.2 1.2 0 0 1 10.2 4h3.6A1.2 1.2 0 0 1 15 5.2V7M9 7v12.5M15 7v12.5M7 19.5V21M17 19.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   plane: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3.8c0-1 .7-1.8 1.5-1.8s1.5.8 1.5 1.8V9l7 4.2v2l-7-2.2v4.8l2.2 1.7V21L12 20l-3.7 1v-1.5l2.2-1.7V13l-7 2.2v-2L10.5 9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
   city: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V9l5-3v15M10 21V4l7 3v14M19 21V12h-2M13 9h1M13 12h1M13 15h1M7 12h1M7 15h1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -136,8 +140,8 @@ const FARBEN = { // [Seitenhintergrund, Farbe, dunkel] – deutlich unterscheidb
   blau: ['#E1ECFB', '#1F6FD1', '#134E99'], violett: ['#ECE8FD', '#6B52D6', '#4A35A8'], rosa: ['#FCE5EE', '#D23F7E', '#9C2A5C'],
   rot: ['#FCE4E1', '#D63A2F', '#9E2419'], rotbraun: ['#FDEBDB', '#E07415', '#A65208'], gelb: ['#FBF1CF', '#C29200', '#8A6700']
 };
-const ICONS = ['suitcase', 'plane', 'city', 'mountain', 'van', 'go', 'tent', 'home', 'bag', 'cart', 'bike', 'snow', 'sun', 'drop', 'flame', 'bolt', 'wrench', 'key', 'medic', 'paw', 'flag', 'list'];
-const ITEM_ICONS = ['bike', 'awning', 'window', 'door', 'cabinet', 'lock', 'toilet', 'fan', 'wedge', 'fuel', 'oil', 'canister', 'wiper', 'gasbottle', 'waste', 'gauge', 'nav', 'bikini', 'rainshirt', 'plant', 'shield', 'tap', 'bottle', 'roll', 'doc', 'map', 'box', 'bowl', 'leash', 'blanket', 'bed', 'shoe', 'shirt', 'umbrella', 'pill', 'cream', 'tooth', 'scissors', 'glasses', 'towel', 'bug', 'torch', 'headphones', 'laptop', 'dice', 'binoculars', 'gem', 'coffee', 'cheese', 'jar', 'apple', 'egg', 'beer', 'wine', 'pot', 'step', 'support', 'plug', 'bolt', 'drop', 'flame', 'tire', 'light', 'fridge', 'trash', 'key', 'wrench', 'medic', 'snow', 'sun', 'paw', 'flag'];
+const ICONS = ['suitcase', 'sea', 'beach', 'boat', 'palm', 'plane', 'city', 'mountain', 'van', 'go', 'tent', 'home', 'bag', 'cart', 'bike', 'snow', 'sun', 'drop', 'flame', 'bolt', 'wrench', 'key', 'medic', 'paw', 'flag', 'list'];
+const ITEM_ICONS = ['sea', 'beach', 'boat', 'palm', 'suitcase', 'plane', 'bike', 'awning', 'window', 'door', 'cabinet', 'lock', 'toilet', 'fan', 'wedge', 'fuel', 'oil', 'canister', 'wiper', 'gasbottle', 'waste', 'gauge', 'nav', 'bikini', 'rainshirt', 'plant', 'shield', 'tap', 'bottle', 'roll', 'doc', 'map', 'box', 'bowl', 'leash', 'blanket', 'bed', 'shoe', 'shirt', 'umbrella', 'pill', 'cream', 'tooth', 'scissors', 'glasses', 'towel', 'bug', 'torch', 'headphones', 'laptop', 'dice', 'binoculars', 'gem', 'coffee', 'cheese', 'jar', 'apple', 'egg', 'beer', 'wine', 'pot', 'step', 'support', 'plug', 'bolt', 'drop', 'flame', 'tire', 'light', 'fridge', 'trash', 'key', 'wrench', 'medic', 'snow', 'sun', 'paw', 'flag'];
 const itemIcon = (ic, cls = '') => ic && I[ic] ? `<span class="itemicon ${cls}" aria-hidden="true">${I[ic]}</span>` : '';
 const DEFAULT_COLOR = { sommer: 'rotbraun', winter: 'blau', stadt: 'violett', wochenende: 'rosa' };
 const meta = id => { const L = view.lists[id]; return L ? { id, name: L.name || 'Liste', done: L.done || 'Alles gepackt!', icon: I[L.icon] && ICONS.includes(L.icon) ? L.icon : 'list', color: FARBEN[L.color] ? L.color : (DEFAULT_COLOR[id] || 'grau') } : null; };
@@ -1031,7 +1035,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 3;
+const APP_VERSION = 4;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
