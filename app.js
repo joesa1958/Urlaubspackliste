@@ -26,6 +26,8 @@ const fmtTime = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit'
 
 /* ---------- Icons ---------- */
 const I = {
+  island: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 16.5c1.8-2.6 4.6-4 7.5-4s5.7 1.4 7.5 4M12.5 12.6c.2-2.8-.2-5.3-1.2-7.6M11.3 5C9.8 3.6 7.5 3.4 6 4.5c1.6 0 2.9.4 3.8 1.3M11.3 5c1.3-1.6 3.6-2 5.3-1.1-1.6.2-2.8.8-3.6 1.8M2.5 20c1.6 0 1.6-1.3 3.2-1.3s1.6 1.3 3.2 1.3 1.6-1.3 3.1-1.3 1.6 1.3 3.2 1.3 1.6-1.3 3.1-1.3 1.6 1.3 3.2 1.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  lighthouse: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 8h5l1.5 12H8zM10 8V6.5a2 2 0 0 1 4 0V8M12 3v1.5M8.8 13.5h6.4M5 6l2.5 1M19 6l-2.5 1M5.5 21h13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   sea: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9c1.6 0 1.6-1.5 3.2-1.5S7.3 9 8.9 9s1.6-1.5 3.1-1.5S13.6 9 15.2 9s1.6-1.5 3.1-1.5S19.9 9 21.5 9M2.5 13.5c1.6 0 1.6-1.5 3.2-1.5s1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5M2.5 18c1.6 0 1.6-1.5 3.2-1.5s1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5 1.6-1.5 3.1-1.5 1.6 1.5 3.2 1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   beach: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 0 1 15.5-2.8zM11.8 9.7 15 20M3 20.5c1.5 0 1.5-1 3-1s1.5 1 3 1 1.5-1 3-1 1.5 1 3 1 1.5-1 3-1 1.5 1 3 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   boat: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M12 4l6.5 10H12M10 6.5 5.5 14H10M3.5 17.5h17l-2 3h-13zM3 21.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -140,8 +142,8 @@ const FARBEN = { // [Seitenhintergrund, Farbe, dunkel] – deutlich unterscheidb
   blau: ['#E1ECFB', '#1F6FD1', '#134E99'], violett: ['#ECE8FD', '#6B52D6', '#4A35A8'], rosa: ['#FCE5EE', '#D23F7E', '#9C2A5C'],
   rot: ['#FCE4E1', '#D63A2F', '#9E2419'], rotbraun: ['#FDEBDB', '#E07415', '#A65208'], gelb: ['#FBF1CF', '#C29200', '#8A6700']
 };
-const ICONS = ['suitcase', 'sea', 'beach', 'boat', 'palm', 'plane', 'city', 'mountain', 'van', 'go', 'tent', 'home', 'bag', 'cart', 'bike', 'snow', 'sun', 'drop', 'flame', 'bolt', 'wrench', 'key', 'medic', 'paw', 'flag', 'list'];
-const ITEM_ICONS = ['sea', 'beach', 'boat', 'palm', 'suitcase', 'plane', 'bike', 'awning', 'window', 'door', 'cabinet', 'lock', 'toilet', 'fan', 'wedge', 'fuel', 'oil', 'canister', 'wiper', 'gasbottle', 'waste', 'gauge', 'nav', 'bikini', 'rainshirt', 'plant', 'shield', 'tap', 'bottle', 'roll', 'doc', 'map', 'box', 'bowl', 'leash', 'blanket', 'bed', 'shoe', 'shirt', 'umbrella', 'pill', 'cream', 'tooth', 'scissors', 'glasses', 'towel', 'bug', 'torch', 'headphones', 'laptop', 'dice', 'binoculars', 'gem', 'coffee', 'cheese', 'jar', 'apple', 'egg', 'beer', 'wine', 'pot', 'step', 'support', 'plug', 'bolt', 'drop', 'flame', 'tire', 'light', 'fridge', 'trash', 'key', 'wrench', 'medic', 'snow', 'sun', 'paw', 'flag'];
+const ICONS = ['suitcase', 'sea', 'island', 'lighthouse', 'beach', 'boat', 'palm', 'plane', 'city', 'mountain', 'van', 'go', 'tent', 'home', 'bag', 'cart', 'bike', 'snow', 'sun', 'drop', 'flame', 'bolt', 'wrench', 'key', 'medic', 'paw', 'flag', 'list'];
+const ITEM_ICONS = ['sea', 'island', 'lighthouse', 'beach', 'boat', 'palm', 'suitcase', 'plane', 'bike', 'awning', 'window', 'door', 'cabinet', 'lock', 'toilet', 'fan', 'wedge', 'fuel', 'oil', 'canister', 'wiper', 'gasbottle', 'waste', 'gauge', 'nav', 'bikini', 'rainshirt', 'plant', 'shield', 'tap', 'bottle', 'roll', 'doc', 'map', 'box', 'bowl', 'leash', 'blanket', 'bed', 'shoe', 'shirt', 'umbrella', 'pill', 'cream', 'tooth', 'scissors', 'glasses', 'towel', 'bug', 'torch', 'headphones', 'laptop', 'dice', 'binoculars', 'gem', 'coffee', 'cheese', 'jar', 'apple', 'egg', 'beer', 'wine', 'pot', 'step', 'support', 'plug', 'bolt', 'drop', 'flame', 'tire', 'light', 'fridge', 'trash', 'key', 'wrench', 'medic', 'snow', 'sun', 'paw', 'flag'];
 const itemIcon = (ic, cls = '') => ic && I[ic] ? `<span class="itemicon ${cls}" aria-hidden="true">${I[ic]}</span>` : '';
 const DEFAULT_COLOR = { sommer: 'rotbraun', winter: 'blau', stadt: 'violett', wochenende: 'rosa' };
 const meta = id => { const L = view.lists[id]; return L ? { id, name: L.name || 'Liste', done: L.done || 'Alles gepackt!', icon: I[L.icon] && ICONS.includes(L.icon) ? L.icon : 'list', color: FARBEN[L.color] ? L.color : (DEFAULT_COLOR[id] || 'grau') } : null; };
@@ -1035,7 +1037,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 4;
+const APP_VERSION = 5;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
