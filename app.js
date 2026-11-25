@@ -240,7 +240,7 @@ function applyOp(doc, op) {
     case 'renameSection': { const s = sec(op.s); if (s) s.title = op.title; break; }
     case 'delSection': {
       const i = L.sections.findIndex(s => s.id === op.s);
-      if (i >= 0 && L.sections.length > 1) { const [s] = L.sections.splice(i, 1); (L.sections[Math.max(0, i - 1)]).items.push(...s.items); }
+      if (i >= 0 && L.sections.length > 1) { const [s] = L.sections.splice(i, 1); if (!op.withItems) (L.sections[Math.max(0, i - 1)]).items.push(...s.items); }
       break;
     }
     case 'dupItem': { const f = findItem(L, op.i); if (f && !findItem(L, op.id)) f.s.items.splice(f.i + 1, 0, { ...JSON.parse(JSON.stringify(f.item)), id: op.id, text: op.text }); break; }
@@ -255,6 +255,7 @@ function applyOp(doc, op) {
       break;
     }
     case 'selectAll': L.sections.forEach(s => s.items.forEach(it => { it.sel = op.val; })); break;
+    case 'selectSection': { const x = sec(op.s); if (x) x.items.forEach(it => { it.sel = op.val; }); break; }
     case 'lastDone': L.lastDone = op.date; break;
     case 'renameList': L.name = op.name; break;
     case 'setDate': if (op.date) L.date = op.date; else delete L.date; break;
@@ -538,7 +539,7 @@ function topBar(backHref, backLabel, right) {
 const listIcons = id => `<a class="iconbtn" href="#/liste/${id}/auswahl" aria-label="Auswahl: was diesmal mitkommt">${I.select}</a><a class="iconbtn" href="#/liste/${id}/bearbeiten" aria-label="Liste bearbeiten">${I.edit}</a>`;
 
 /* Abschnitte als antippbare Liste (Sprung an den Anfang des Abschnitts) */
-let secPick = null, introView = null; const wheelPos = {};
+let secPick = null, introView = null, secDel = null; const wheelPos = {};
 function secListHtml(st, secNames, secOf, showDone) {
   return `<div class="seclist">${secNames.map((n, i) => {
     const xs = st.seq.filter(x => secOf(x) === n), d = xs.filter(x => st.done.has(x)).length;
@@ -629,7 +630,8 @@ function vSelect(id) {
   const body = !items.length
     ? `<div class="card"><div class="empty">Diese Liste ist noch leer.<br><a href="#/liste/${id}/bearbeiten">Punkte hinzufügen</a></div></div>`
     : L.sections.filter(s => s.items.length).map(s => `<section class="group">
-        ${s.title ? `<div class="grouphead"><span class="grouptitle">${esc(s.title)}</span></div>` : ''}
+        ${(() => { const on = s.items.filter(isSel).length, full = on === s.items.length;
+          return `<div class="grouphead"><span class="grouptitle">${esc(s.title || '')}</span><button class="textbtn small" data-act="selSec" data-s="${s.id}" data-val="${full ? 0 : 1}">${full ? 'Alle abwählen' : on ? `Alle wählen (${on}/${s.items.length})` : 'Alle wählen'}</button></div>`; })()}
         <div class="card"><ul>${s.items.map(it => `<li><button class="row ${isSel(it) ? '' : 'off'}" data-act="toggleSel" data-i="${it.id}" role="checkbox" aria-checked="${isSel(it)}">
           <span class="check ${isSel(it) ? 'on' : ''}">${isSel(it) ? I.tick() : ''}</span>
           ${itemIcon(it.icon)}<span class="label">${esc(it.text)}${it.note ? `<span class="lnote">${esc(it.note)}</span>` : ''}</span>${chip(it.resp)}</button></li>`).join('')}</ul></div></section>`).join('');
@@ -656,6 +658,13 @@ function vEdit(id) {
       <input class="sectitle" data-act="secTitle" data-s="${s.id}" value="${esc(s.title)}" placeholder="${L.sections.length > 1 ? 'Abschnitt benennen' : 'Abschnitt (optional)'}" aria-label="Name des Abschnitts" enterkeyhint="done">
       ${L.sections.length > 1 ? `<button class="smallbtn" data-act="delSection" data-s="${s.id}">Abschnitt löschen</button>` : ''}
     </div>
+    ${secDel === s.id ? `<div class="secdel">
+      <div class="secdelq">„${esc(s.title || 'Ohne Namen')}“ löschen${s.items.length ? ` – was passiert mit den ${s.items.length} Punkt${s.items.length === 1 ? '' : 'en'}?` : '?'}</div>
+      ${s.items.length ? `<button class="secondary danger" data-act="delSectionAll" data-s="${s.id}">Abschnitt mit allen Punkten löschen</button>
+      <button class="secondary" data-act="delSectionOnly" data-s="${s.id}">Nur Abschnitt löschen, Punkte nach oben verschieben</button>`
+      : `<button class="secondary danger" data-act="delSectionOnly" data-s="${s.id}">Abschnitt löschen</button>`}
+      <button class="textbtn" data-act="delSectionCancel">Abbrechen</button>
+    </div>` : ''}
     <div class="card"><ul class="items" data-s="${s.id}">
       ${s.items.map(it => `<li data-i="${it.id}"><div class="erow">
         <button class="minus" data-act="delItem" data-i="${it.id}" aria-label="Punkt löschen"><span></span></button>
@@ -933,11 +942,15 @@ document.addEventListener('click', e => {
       const sid = 's-' + uid(); commit({ t: 'addSection', l: id, sec: { id: sid, title: '' } });
       const inp = document.querySelector(`.sectitle[data-s="${sid}"]`); if (inp) inp.focus(); break;
     }
-    case 'delSection': {
-      const L = view.lists[id]; const s = L.sections.find(x => x.id === el.dataset.s);
-      const msg = s.items.length ? `Abschnitt löschen? Die ${s.items.length} Punkte darin werden in den Abschnitt darüber verschoben.` : 'Abschnitt löschen?';
-      if (confirm(msg)) commit({ t: 'delSection', l: id, s: s.id }); break;
+    case 'delSection': secDel = secDel === el.dataset.s ? null : el.dataset.s; render(); break;
+    case 'delSectionCancel': secDel = null; render(); break;
+    case 'delSectionOnly': case 'delSectionAll': {
+      const L = view.lists[id]; const s = L.sections.find(x => x.id === el.dataset.s); secDel = null; if (!s) { render(); break; }
+      const all = act === 'delSectionAll', n = s.items.length;
+      commit({ t: 'delSection', l: id, s: s.id, withItems: all });
+      toast(all && n ? `„${s.title || 'Abschnitt'}“ mit ${n} Punkt${n === 1 ? '' : 'en'} gelöscht` : `„${s.title || 'Abschnitt'}“ gelöscht`); break;
     }
+    case 'selSec': commit({ t: 'selectSection', l: id, s: el.dataset.s, val: el.dataset.val === '1' }); break;
     case 'login': if (!rememberLogin(!isStandalone())) { e.preventDefault(); toast('Einen Moment – bitte nochmal tippen'); } break;
     case 'logout': if (confirm('Von Dropbox abmelden? Die Listen werden von diesem iPhone entfernt und bleiben in der Dropbox.')) logout(); break;
     case 'export': {
@@ -1054,7 +1067,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 6;
+const APP_VERSION = 7;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });

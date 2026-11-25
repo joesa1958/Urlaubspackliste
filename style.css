@@ -227,3 +227,7 @@ li.placeholder { background: var(--sel); border-top: 1px solid var(--line2); }
 .ldbadge.past .ldd, .ldbadge.past .ldr { color: var(--faint); }
 .ldate { min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); padding-bottom: 6px; }
 .ldate input { flex: 1; min-width: 0; max-width: 160px; box-sizing: border-box; font: inherit; font-size: 15px; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--card); min-height: 32px; }
+.secdel { display: flex; flex-direction: column; gap: 8px; background: var(--card); border: 1px solid var(--cardline); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.secdelq { font-size: 15px; color: var(--ink); }
+.secdel .textbtn { align-self: center; }
+.textbtn.small { font-size: 14px; min-height: 32px; }
