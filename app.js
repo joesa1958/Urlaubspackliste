@@ -147,9 +147,13 @@ const FARBEN = { // [Seitenhintergrund, Farbe, dunkel] – deutlich unterscheidb
 };
 const ICONS = ['suitcase', 'gift', 'advent', 'sea', 'island', 'lighthouse', 'beach', 'boat', 'palm', 'plane', 'city', 'mountain', 'van', 'go', 'tent', 'home', 'bag', 'cart', 'bike', 'snow', 'sun', 'drop', 'flame', 'bolt', 'wrench', 'key', 'medic', 'paw', 'flag', 'list'];
 const ITEM_ICONS = ['gift', 'advent', 'sea', 'island', 'lighthouse', 'beach', 'boat', 'palm', 'suitcase', 'plane', 'bike', 'awning', 'window', 'door', 'cabinet', 'lock', 'toilet', 'fan', 'wedge', 'fuel', 'oil', 'canister', 'wiper', 'gasbottle', 'waste', 'gauge', 'nav', 'bikini', 'rainshirt', 'plant', 'shield', 'tap', 'bottle', 'roll', 'doc', 'map', 'box', 'bowl', 'leash', 'blanket', 'bed', 'shoe', 'shirt', 'umbrella', 'pill', 'cream', 'tooth', 'scissors', 'glasses', 'towel', 'bug', 'torch', 'headphones', 'laptop', 'dice', 'binoculars', 'gem', 'coffee', 'cheese', 'jar', 'apple', 'egg', 'beer', 'wine', 'pot', 'step', 'support', 'plug', 'bolt', 'drop', 'flame', 'tire', 'light', 'fridge', 'trash', 'key', 'wrench', 'medic', 'snow', 'sun', 'paw', 'flag'];
-const itemIcon = (ic, cls = '') => ic && I[ic] ? `<span class="itemicon ${cls}" aria-hidden="true">${I[ic]}</span>` : '';
+/* Eigene Symbole: jedes Emoji ist als Symbol erlaubt (wird wie die eingebauten gespeichert) */
+const isEmo = v => typeof v === 'string' && !!v && !I[v] && [...v].length <= 12 && /\p{Extended_Pictographic}/u.test(v);
+const ico = v => I[v] || (isEmo(v) ? `<span class="emo">${esc(v)}</span>` : '');
+const firstEmo = v => { const seg = typeof Intl !== 'undefined' && Intl.Segmenter ? [...new Intl.Segmenter('de', { granularity: 'grapheme' }).segment(v)].map(x => x.segment) : [...v]; return seg.find(isEmo) || ''; };
+const itemIcon = (ic, cls = '') => ic && ico(ic) ? `<span class="itemicon ${cls}" aria-hidden="true">${ico(ic)}</span>` : '';
 const DEFAULT_COLOR = { sommer: 'rotbraun', winter: 'blau', stadt: 'violett', wochenende: 'rosa' };
-const meta = id => { const L = view.lists[id]; return L ? { id, name: L.name || 'Liste', done: L.done || 'Alles gepackt!', icon: I[L.icon] && ICONS.includes(L.icon) ? L.icon : 'list', color: FARBEN[L.color] ? L.color : (DEFAULT_COLOR[id] || 'grau') } : null; };
+const meta = id => { const L = view.lists[id]; return L ? { id, name: L.name || 'Liste', done: L.done || 'Alles gepackt!', icon: (I[L.icon] && ICONS.includes(L.icon)) || isEmo(L.icon) ? L.icon : 'list', color: FARBEN[L.color] ? L.color : (DEFAULT_COLOR[id] || 'grau') } : null; };
 const slugId = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 function emptyDoc() { return ensureLists({ v: 1, lists: {} }); }
 function newList(id, name, icon, done) { return { name, icon, done: done || 'Alles gepackt!', sections: [{ id: 's-' + id, title: '', items: [] }], lastDone: null }; }
@@ -561,7 +565,7 @@ function vHome() {
   </div>`;
 }
 
-const listIcon = (icon, color = 'grau') => `<span class="listicon" style="background:${FARBEN[color][1]};color:#FFFFFF">${I[icon]}</span>`;
+const listIcon = (icon, color = 'grau') => `<span class="listicon" style="background:${FARBEN[color][1]};color:#FFFFFF">${ico(icon)}</span>`;
 function topBar(backHref, backLabel, right) {
   return `<div class="bar"><a class="back" href="${backHref}">${I.back}${esc(backLabel)}</a><div class="icons">${right}</div></div>`;
 }
@@ -607,7 +611,7 @@ function vRun(id) {
     const secList = multiSec ? secListHtml(st, secNames, secOf, false) : '';
     return `<div class="screen"><div class="run">${head('')}
       <div class="finished intro">
-        <span class="listicon" ${big}>${I[m.icon]}</span>
+        <span class="listicon" ${big}>${ico(m.icon)}</span>
         <h2>${esc(m.name)}</h2>
         <div class="sub">${st.begun ? `${st.doneCount} von ${st.total} eingepackt` : `${st.total} Punkt${st.total === 1 ? '' : 'e'}`}${multiSec && secNames.length > 1 ? ` in ${secNames.length} Abschnitten` : ''}${st.total < items.length ? ` · ${items.length - st.total} abgewählt` : ''}</div>
         ${secList}
@@ -634,8 +638,8 @@ function vRun(id) {
   const slots = [-2, -1, 0, 1, 2].map(o => {
     const x = st.seq[ci + o];
     if (!x) return `<div class="wslot ${cls[o]}" aria-hidden="true"></div>`;
-    const b = st.byId[x], d = st.done.has(x), ic = b.it.icon && I[b.it.icon];
-    if (o === 0) return `<div class="wslot w0">${ic ? `<span class="wicon" aria-hidden="true">${I[b.it.icon]}</span>` : ''}<span class="wtext">${esc(b.it.text)}</span>${b.it.note ? `<span class="explain wnote">${esc(b.it.note)}</span>` : ''}${b.it.resp ? `<span class="resp wresp">Zuständig: ${chip(b.it.resp)}</span>` : ''}</div>`;
+    const b = st.byId[x], d = st.done.has(x), ic = b.it.icon && ico(b.it.icon);
+    if (o === 0) return `<div class="wslot w0">${ic ? `<span class="wicon" aria-hidden="true">${ic}</span>` : ''}<span class="wtext">${esc(b.it.text)}</span>${b.it.note ? `<span class="explain wnote">${esc(b.it.note)}</span>` : ''}${b.it.resp ? `<span class="resp wresp">Zuständig: ${chip(b.it.resp)}</span>` : ''}</div>`;
     return `<button class="wslot ${cls[o]} ${d ? 'isdone' : ''}" data-act="wheelJump" data-i="${x}" aria-label="${esc(b.it.text)}${d ? ' (eingepackt)' : ''}">${d ? `<span class="wtick">${I.tick(16, 'currentColor', 2.4)}</span>` : ''}<span class="wtext">${esc(b.it.text)}</span></button>`;
   }).join('');
   return `<div class="screen"><div class="run">${head(`<span class="count" style="padding:0 6px">${st.doneCount} / ${st.total}</span>`)}
@@ -701,7 +705,7 @@ function vEdit(id) {
         <span class="mcheck" aria-hidden="true">${moveSel.has(it.id) ? I.tick(16, '#fff', 2.6) : ''}</span>${itemIcon(it.icon)}<span class="label">${esc(it.text)}</span>${chip(it.resp)}</button></li>` : `<li data-i="${it.id}"><div class="erow">
         ${filt ? `<button class="minus" data-act="unselItem" data-i="${it.id}" aria-label="„${esc(it.text)}“ aus dieser Liste nehmen"><span></span></button>`
           : `<button class="minus" data-act="delItem" data-i="${it.id}" aria-label="Punkt löschen"><span></span></button>`}
-        <button class="ipick ${it.icon ? '' : 'none'}" data-act="pickItemIcon" data-i="${it.id}" aria-label="Symbol für diesen Punkt">${it.icon && I[it.icon] ? I[it.icon] : '+'}</button>
+        <button class="ipick ${it.icon ? '' : 'none'}" data-act="pickItemIcon" data-i="${it.id}" aria-label="Symbol für diesen Punkt">${ico(it.icon) || '+'}</button>
         <div class="etext"><textarea rows="1" data-act="itemText" data-i="${it.id}" aria-label="Punkt umbenennen" enterkeyhint="done">${esc(it.text)}</textarea>
           <textarea rows="1" class="note" data-act="itemNote" data-i="${it.id}" aria-label="Erklärung zu „${esc(it.text)}“" placeholder="Erklärung …">${esc(it.note || '')}</textarea></div>
         <button class="chip ${it.resp || 'none'}" data-act="cycleResp" data-i="${it.id}" aria-label="Zuständig: ${it.resp ? PEOPLE[it.resp] : 'niemand'} – antippen zum Ändern">${it.resp ? PEOPLE[it.resp] : 'Zuständig?'}</button>
@@ -718,6 +722,7 @@ function vEdit(id) {
       </div>` : ''}
       ${itemPick === it.id ? `<div class="picker"><div class="pickhead">Symbol für diesen Punkt</div>
         <div class="iconrow">${ITEM_ICONS.map(ic => `<button class="ipick big ${ic === it.icon ? 'on' : ''}" data-act="setItemIcon" data-i="${it.id}" data-icon="${ic}" aria-label="Symbol ${ic}">${I[ic]}</button>`).join('')}</div>
+        <label class="emorow"><span>Eigenes Emoji</span><input class="emoinput" data-emo="item" data-i="${it.id}" value="${isEmo(it.icon) ? esc(it.icon) : ''}" placeholder="🙂" aria-label="Eigenes Emoji als Symbol" autocomplete="off"></label>
         <div style="display:flex;justify-content:space-between"><button class="textbtn" data-act="setItemIcon" data-i="${it.id}" data-icon="">Kein Symbol</button><button class="textbtn strong" data-act="pickItemIcon" data-i="${it.id}">Fertig</button></div>
       </div>` : ''}</li>`).join('')}
     </ul>
@@ -785,6 +790,7 @@ function vLists() {
       ${iconPick === l.id ? `<div class="picker">
         <div class="pickhead">Symbol</div>
         <div class="iconrow">${ICONS.map(ic => `<button class="iconpick ${ic === l.icon ? 'on' : ''}" data-act="setIcon" data-l="${l.id}" data-icon="${ic}" aria-label="Symbol ${ic}">${listIcon(ic, l.color)}</button>`).join('')}</div>
+        <label class="emorow"><span>Eigenes Emoji</span><input class="emoinput" data-emo="list" data-l="${l.id}" value="${isEmo(l.icon) ? esc(l.icon) : ''}" placeholder="🙂" aria-label="Eigenes Emoji als Symbol" autocomplete="off"></label>
         <div class="pickhead">Farbe</div>
         <div class="iconrow">${Object.keys(FARBEN).map(c => `<button class="swatch ${c === l.color ? 'on' : ''}" data-act="setColor" data-l="${l.id}" data-color="${c}" aria-label="Farbe ${c}" style="background:${FARBEN[c][1]};border-color:${FARBEN[c][1]}"><span style="background:#fff"></span></button>`).join('')}</div>
         <button class="textbtn strong" data-act="pickIcon" data-l="${l.id}" style="align-self:flex-end">Fertig</button>
@@ -865,7 +871,15 @@ function route() {
 }
 let lastRouteKey = '';
 function autosize(root = document) { root.querySelectorAll('textarea[data-act]').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }); }
-document.addEventListener('input', e => { if (e.target.matches('textarea[data-act]')) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; } });
+document.addEventListener('input', e => {
+  if (e.target.matches('input[data-emo]')) {
+    const v = firstEmo(e.target.value); if (!v) return;
+    const r = route();
+    if (e.target.dataset.emo === 'list') commit({ t: 'setIcon', l: e.target.dataset.l, icon: v });
+    else { const f = findItem(view.lists[r.id], e.target.dataset.i); if (f) { itemPick = null; commit({ t: 'editItem', l: r.id, i: f.item.id, patch: { icon: v } }); } }
+    return;
+  }
+  if (e.target.matches('textarea[data-act]')) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; } });
 function applyTheme(r) {
   const st = document.documentElement.style, m = r.id && meta(r.id);
   const keys = ['--accent', '--accent-dark', '--accent-soft', '--bg', '--sel'];
@@ -1151,7 +1165,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 13;
+const APP_VERSION = 14;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });

@@ -248,3 +248,9 @@ li.placeholder { background: var(--sel); border-top: 1px solid var(--line2); }
 .movebar .copyto { max-height: 30vh; overflow-y: auto; }
 .movebar .copyto { display: flex; flex-wrap: wrap; gap: 8px; }
 .movebar .copyto button { flex: none; min-height: 44px; padding: 0 16px; border: 1.5px solid var(--accent); border-radius: 22px; background: var(--card); color: var(--accent); font-size: 16px; font-weight: 600; }
+.emo { font-size: 1.15em; line-height: 1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.listicon .emo { font-size: 24px; }
+.wicon .emo { font-size: 34px; }
+.ipick .emo { font-size: 20px; }
+.emorow { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); }
+.emoinput { width: 64px; min-height: 44px; font-size: 26px; text-align: center; border: 1.5px dashed var(--line); border-radius: 12px; background: var(--card); }
