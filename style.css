@@ -379,3 +379,4 @@ textarea.tnotesview:focus { background: var(--bg); border-radius: 8px; box-shado
 
 .fillbtn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; margin-bottom: 8px; border: 1.5px solid var(--accent); border-radius: 12px; background: var(--card); color: var(--accent); font: inherit; font-size: 16px; font-weight: 600; }
 .fillwrap { margin-bottom: 4px; }
+.tfield textarea.tarea { font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 40px; box-sizing: border-box; width: 100%; resize: none; overflow: hidden; line-height: 1.4; }

@@ -812,7 +812,7 @@ function vStation(id, sid) {
   if (ed) parts.push(tcard('camera', 'Titelbild', `<label class="tlink filebtn"><input type="file" accept="image/*" data-photo="${id}" data-st="${sid}">${I.camera || ''}${T.photo ? 'Anderes Foto wählen' : 'Foto wählen'}</label>${T.photo ? `<button class="textbtn" data-act="photoDel" data-st="${sid}">Foto entfernen</button>` : ''}`));
   if (ed && multi) parts.push(tcard('mappin', 'Station', inp('name', 'Name der Station', 'text', 'z. B. Hamburg') + `<button class="kindbtn ${main && main.id === sid ? 'task' : ''}" data-act="mainStation" data-st="${sid}">★ Hauptstation${main && main.id === sid ? '' : ' machen'}</button>`));
   if (ed) parts.push(tcard('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>${multi ? 'Anreise' : 'Abreise'}</span><input type="date" data-st="${sid}" data-trip="from" value="${esc(T.from || '')}"></label><label class="tfield"><span>${multi ? 'Abreise' : 'Rückkehr'}</span><input type="date" data-st="${sid}" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
-  if (ed || T.place) parts.push(tcard('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" data-st="${sid}" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.mappin || ''}In Apple Karten</a>`));
+  if (ed || T.place) parts.push(tcard('mappin', 'Ort', ed ? `<label class="tfield"><span>Ort oder Adresse</span><textarea rows="2" class="tarea" data-st="${sid}" data-trip="place" placeholder="Unterkunft, Straße, Ort" enterkeyhint="done">${esc(T.place || '')}</textarea></label>` : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" data-st="${sid}" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.mappin || ''}In Apple Karten</a>`));
   if (ed || T.url || T.accom || T.guest || T.booking || T.room || T.price || T.phone || T.email || T.contact) parts.push(tcard('ticket', 'Buchung', ed
     ? inp('room', 'Zimmer / Kategorie', 'text', 'z. B. Doppelzimmer mit Balkon') + inp('contact', 'Kontaktperson', 'text', 'Name') + inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
     : `${T.accom ? `<a class="tlink" href="${link(T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
@@ -1511,7 +1511,7 @@ document.addEventListener('change', async e => {
   if (e.target.matches('input[data-docs]')) { const fs = [...(e.target.files || [])]; if (fs.length) addTripDocs(e.target.dataset.docs, e.target.dataset.st, fs); return; }
   if (e.target.matches('[data-st][data-trip]')) {
     const r = route(); if (!view.lists[r.id]) return;
-    const v = (e.target.value || '').trim(), sid = e.target.dataset.st, f = e.target.dataset.trip, T = stationsOf(r.id).find(y => y.id === sid) || {};
+    const f = e.target.dataset.trip, v = (e.target.value || '').trim().replace(f === 'place' ? /\s*\n+\s*/g : /$^/, ', '), sid = e.target.dataset.st, T = stationsOf(r.id).find(y => y.id === sid) || {};
     if (v === (T[f] || '')) return;
     const patch = { [f]: v }; if (f === 'place') { patch.lat = ''; patch.lon = ''; }
     commit({ t: 'setStation', l: r.id, s: sid, patch });
@@ -1596,7 +1596,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 41;
+const APP_VERSION = 42;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
