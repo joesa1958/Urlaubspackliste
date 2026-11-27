@@ -1165,7 +1165,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 14;
+const APP_VERSION = 15;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1191,3 +1191,30 @@ window.addEventListener('hashchange', () => { moveSel = null; render(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sync(); checkUpdate(); } });
 window.addEventListener('online', () => sync());
 boot();
+
+/* Walze: hoch- und runterwischen blättert wie Zurück/Weiter, ohne etwas abzuhaken */
+let wDrag = null, wSwallow = false;
+document.addEventListener('touchstart', e => {
+  const w = e.target.closest && e.target.closest('.wheelwrap'); if (!w || e.touches.length !== 1) return;
+  wDrag = { y: e.touches[0].clientY, dy: 0, el: w.querySelector('.wheel') };
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!wDrag) return;
+  wDrag.dy = e.touches[0].clientY - wDrag.y;
+  if (Math.abs(wDrag.dy) > 6) {
+    e.preventDefault();
+    if (wDrag.el) { wDrag.el.style.animation = 'none'; wDrag.el.style.transform = `translateY(${Math.max(-140, Math.min(140, wDrag.dy * 0.6))}px)`; }
+  }
+}, { passive: false });
+const wEnd = () => {
+  if (!wDrag) return; const d = wDrag; wDrag = null;
+  if (d.el) d.el.style.transform = '';
+  if (Math.abs(d.dy) < 24) return;
+  wSwallow = true; setTimeout(() => { wSwallow = false; }, 450);
+  const steps = Math.max(1, Math.min(10, Math.round(Math.abs(d.dy) / 46)));
+  const act = d.dy < 0 ? 'runLater' : 'runBack'; // nach oben wischen = nächster Punkt
+  for (let k = 0; k < steps; k++) { const b = document.querySelector(`[data-act="${act}"]`); if (!b || b.disabled) break; b.click(); }
+};
+document.addEventListener('touchend', wEnd);
+document.addEventListener('touchcancel', wEnd);
+document.addEventListener('click', e => { if (wSwallow && e.target.closest && e.target.closest('.wheelwrap')) { e.stopPropagation(); e.preventDefault(); } }, true);
