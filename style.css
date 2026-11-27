@@ -363,3 +363,9 @@ textarea.tnotesview:focus { background: var(--bg); border-radius: 8px; box-shado
 .tst .tstsub { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tstmain { color: #E0A100; }
 .tadd { border: 0; background: none; padding: 4px 0 0; }
+
+/* Gruppen-Schalter und Archiv */
+.groupopts { display: flex; gap: 8px; margin: -4px 4px 10px; }
+.group.archive .card { opacity: .55; }
+.group.archive .listicon { filter: grayscale(1); }
+.group.archive:not(.named) .grouptitle::after { content: " · Archiv"; text-transform: none; letter-spacing: 0; font-weight: 500; }

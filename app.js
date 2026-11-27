@@ -254,6 +254,7 @@ function applyOp(doc, op) {
     case 'addGroup': if (!grp(op.g.id)) doc.groups.push({ id: op.g.id, name: op.g.name, lists: [] }); return;
     case 'renameGroup': { const g = grp(op.g); if (g) g.name = op.name; return; }
     case 'groupTrip': { const g = grp(op.g); if (g) g.trip = !!op.val; return; }
+    case 'groupArchive': { const g = grp(op.g); if (g) g.archive = !!op.val; return; }
     case 'delGroup': {
       const i = doc.groups.findIndex(g => g.id === op.g); if (i < 0 || doc.groups.length < 2) return;
       const [g] = doc.groups.splice(i, 1); doc.groups[Math.max(0, i - 1)].lists.push(...g.lists); return;
@@ -584,7 +585,9 @@ function dateBadge(iso) {
 /* Reisen: Listen in einer Reise-Gruppe öffnen die Reise-Seite (Ort, Buchung, Termine, Notizen, Packliste) */
 const isTripGroup = g => g.trip === true || (g.trip === undefined && /urlaub|reise/i.test(g.name || ''));
 const groupOf = id => view.groups.find(g => g.lists.includes(id));
-const isTrip = id => { const g = groupOf(id); return !!(g && isTripGroup(g)); };
+const isArchive = g => g.archive === true || (g.archive === undefined && /archiv/i.test(g.name || ''));
+const listIsTrip = (g, id) => !!(g && (isTripGroup(g) || (isArchive(g) && view.lists[id] && view.lists[id].trip)));
+const isTrip = id => listIsTrip(groupOf(id), id);
 const dParts = iso => iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').map(Number) : null;
 function rangeText(from, to) {
   const a = dParts(from), b = dParts(to); if (!a) return '';
@@ -809,14 +812,14 @@ function vHome() {
       let stat = !items.length ? 'noch leer' : st.total ? `${st.total} Punkt${st.total === 1 ? '' : 'e'}` : 'noch nichts ausgewählt';
       if (st.started && st.rest.length) stat = `${st.doneCount} von ${st.total} eingepackt`;
       else if (L.lastDone && items.length) stat = `zuletzt gepackt: ${fmtDate(L.lastDone)}`;
-      const trip = isTripGroup(gr);
+      const trip = listIsTrip(gr, l.id);
       if (trip && L.date && L.trip && L.trip.to) { const S = stationsOf(l.id); stat = `${rangeText(L.date, L.trip.to)} · ${S.length > 1 ? S.map(x => x.name || 'Station').join(' → ') : stat}`; }
       const thumb = trip ? tripPhoto(l.id) : '';
       return `<a class="row" href="#/${trip ? 'reise' : 'liste'}/${l.id}" ${trip ? '' : `data-act="openList" data-l="${l.id}"`}>
         ${thumb ? `<span class="listicon thumb"><img src="${thumb}" alt=""></span>` : listIcon(l.icon, l.color)}
         <span class="listtext"><span class="listname">${esc(l.name)}</span><span class="liststat">${esc(stat)}</span></span>${dateBadge(L.date)}${I.chev}</a>`;
     }).join('');
-    return `<section class="group"><div class="grouphead"><span class="grouptitle">${esc(g)}</span></div><div class="card">${rows || '<div class="empty">Keine Listen in dieser Gruppe</div>'}</div></section>`;
+    return `<section class="group ${isArchive(gr) ? 'archive' : ''} ${/archiv/i.test(gr.name || '') ? 'named' : ''}"><div class="grouphead"><span class="grouptitle">${esc(g)}</span></div><div class="card">${rows || '<div class="empty">Keine Listen in dieser Gruppe</div>'}</div></section>`;
   }).join('');
   return `<div class="screen">
     <header class="hero"><img src="hero.jpg" alt=""><div class="inner">
@@ -1077,16 +1080,19 @@ function vLists() {
       <span class="icons">
         <button class="iconbtn small" data-act="groupUp" data-g="${g.id}" aria-label="Gruppe nach oben" ${gi ? '' : 'disabled'}>${I.up}</button>
         <button class="iconbtn small" data-act="groupDown" data-g="${g.id}" aria-label="Gruppe nach unten" ${gi < view.groups.length - 1 ? '' : 'disabled'}>${I.down}</button>
-        <button class="kindbtn ${isTripGroup(g) ? 'task' : ''}" data-act="groupTrip" data-g="${g.id}" aria-label="Reise-Gruppe ${isTripGroup(g) ? 'an' : 'aus'} – antippen zum Wechseln">${isTripGroup(g) ? '✓ ' : ''}Reisen</button>
         ${view.groups.length > 1 ? `<button class="smallbtn" data-act="delGroup" data-g="${g.id}">Löschen</button>` : ''}
       </span>
+    </div>
+    <div class="groupopts">
+      <button class="kindbtn ${isTripGroup(g) ? 'task' : ''}" data-act="groupTrip" data-g="${g.id}">${isTripGroup(g) ? '✓ ' : ''}Reisen</button>
+      <button class="kindbtn ${isArchive(g) ? 'task' : ''}" data-act="groupArchive" data-g="${g.id}">${isArchive(g) ? '✓ ' : ''}Archiv</button>
     </div>
     <div class="card"><ul class="items" data-s="${g.id}">
       ${g.lists.map(meta).filter(Boolean).map(l => `<li data-i="${l.id}"><div class="erow">
         <button class="minus" data-act="delList" data-l="${l.id}" aria-label="Liste löschen"><span></span></button>
         <button class="iconpick" data-act="pickIcon" data-l="${l.id}" aria-label="Symbol und Farbe ändern">${listIcon(l.icon, l.color)}</button>
         <div class="etext"><textarea rows="1" data-act="listName" data-l="${l.id}" aria-label="Liste umbenennen" enterkeyhint="done">${esc(l.name)}</textarea>
-          <label class="ldate"><span>Abreise</span><input type="date" data-act="listDate" data-l="${l.id}" value="${esc(view.lists[l.id].date || '')}"></label></div>
+          ${listIsTrip(g, l.id) ? `<span class="ldate">${view.lists[l.id].date ? `${rangeText(view.lists[l.id].date, (view.lists[l.id].trip || {}).to)} · ` : ''}Daten auf der Reise-Seite</span>` : `<label class="ldate"><span>Abreise</span><input type="date" data-act="listDate" data-l="${l.id}" value="${esc(view.lists[l.id].date || '')}"></label>`}</div>
         <button class="iconbtn small" data-act="dupList" data-l="${l.id}" aria-label="Liste „${esc(l.name)}“ duplizieren">${I.copy}</button>
         <span class="handle" data-drag="${l.id}" aria-hidden="true">${I.handle}</span>
       </div>
@@ -1375,6 +1381,7 @@ document.addEventListener('click', e => {
       if (d) { docs.splice(+el.dataset.k, 1); commit({ t: 'setStation', l: id, s: T.id, patch: { docs: docs.length ? docs : '' } }); dbxApi('files/delete_v2', { path: d.path }).catch(() => {}); toast(`„${d.name}“ gelöscht`); }
       break;
     }
+    case 'groupArchive': { const g = view.groups.find(x => x.id === el.dataset.g); if (g) { const on = !isArchive(g); commit({ t: 'groupArchive', g: g.id, val: on }); toast(on ? `„${g.name}“ ist jetzt das Archiv – erscheint auf der Startseite ausgegraut` : `„${g.name}“ ist kein Archiv mehr`); } break; }
     case 'groupTrip': { const g = view.groups.find(x => x.id === el.dataset.g); if (g) { const on = !isTripGroup(g); commit({ t: 'groupTrip', g: g.id, val: on }); toast(on ? `„${g.name}“: Einträge öffnen jetzt die Reise-Seite` : `„${g.name}“: Einträge öffnen direkt die Liste`); } break; }
     case 'secKind': { const x = view.lists[id].sections.find(y => y.id === el.dataset.s); if (x) { commit({ t: 'secKind', l: id, s: x.id, task: !x.task }); toast(`„${x.title || 'Abschnitt'}“: Knopf heißt jetzt „${x.task ? 'Eingepackt' : 'Erledigt'}“`); } break; }
     case 'dueDone': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) commit({ t: 'editItem', l: r.id, i: f.item.id, patch: { dueDone: !f.item.dueDone } }); break; }
@@ -1551,7 +1558,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 35;
+const APP_VERSION = 36;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
