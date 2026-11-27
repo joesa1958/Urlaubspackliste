@@ -291,6 +291,9 @@ function applyOp(doc, op) {
     case 'selectSection': { const x = sec(op.s); if (x) x.items.forEach(it => { it.sel = op.val; }); break; }
     case 'lastDone': L.lastDone = op.date; break;
     case 'renameList': L.name = op.name; break;
+    case 'mark': { L.marks = L.marks || {}; if (op.val) L.marks[op.i] = 1; else delete L.marks[op.i]; if (!Object.keys(L.marks).length) delete L.marks; break; }
+    case 'markMany': { L.marks = L.marks || {}; op.ids.forEach(x => { L.marks[x] = 1; }); break; }
+    case 'markReset': delete L.marks; break;
     case 'setDate': if (op.date) L.date = op.date; else delete L.date; break;
     case 'setStation': case 'addStation': case 'delStation': case 'mainStation': {
       // alte Reise-Felder (eine Station) beim ersten Zugriff in die Stationsliste übernehmen
@@ -518,6 +521,7 @@ async function sync(manual) {
         if (!store.pending.length) break;
       }
       store.lastSync = Date.now(); store.status = 'ok'; store.error = '';
+      setTimeout(migrateRuns, 0);
       setTimeout(maybeImport, 0); setTimeout(maybeTemplate, 50);
     } catch (e) {
       store.status = navigator.onLine === false ? 'offline' : 'err';
@@ -557,7 +561,7 @@ function runState(id) {
   const byId = {}; L.sections.forEach(s => s.items.forEach(it => { byId[it.id] = { it, sec: s.title }; }));
   const run = runs[id] || { done: [] };
   const seq = allItems(L).filter(isSel).map(x => x.id);
-  const done = new Set(run.done.filter(x => seq.includes(x)));
+  const done = new Set(Object.keys(L.marks || {}).filter(x => seq.includes(x)));
   const rest = seq.filter(x => !done.has(x));
   const nextOpen = (from, incl) => { for (let k = incl ? 0 : 1; k <= seq.length; k++) { const x = seq[(from + k) % seq.length]; if (!done.has(x)) return x; } return null; };
   let cur = null;
@@ -568,9 +572,18 @@ function runState(id) {
   const upcoming = [];
   if (cur) { const ci = seq.indexOf(cur); for (let k = 1; k < seq.length && upcoming.length < 2; k++) { const x = seq[(ci + k) % seq.length]; if (!done.has(x)) upcoming.push(x); } }
   return { run, byId, seq, done, rest, cur, upcoming, nextOpen, pos: cur ? seq.indexOf(cur) + 1 : seq.length,
-    total: seq.length, doneCount: done.size, started: !!runs[id] && done.size > 0, begun: !!(runs[id] && (runs[id].started || done.size)) };
+    total: seq.length, doneCount: done.size, started: done.size > 0, begun: !!((runs[id] && runs[id].started) || done.size) };
 }
-function resetRun(id) { delete runs[id]; saveRuns(); }
+function resetRun(id) { delete runs[id]; saveRuns(); if (view.lists[id] && view.lists[id].marks) commit({ t: 'markReset', l: id }); }
+/* Einmalig: Häkchen, die bisher nur auf diesem iPhone lagen, in den gemeinsamen Stand übernehmen */
+function migrateRuns() {
+  Object.keys(runs).forEach(id => {
+    const r = runs[id], L = view.lists[id]; if (!L || r.mig) return;
+    const ids = (r.done || []).filter(x => !(L.marks || {})[x]); r.mig = 1;
+    if (ids.length) commit({ t: 'markMany', l: id, ids });
+  });
+  saveRuns();
+}
 
 /* Abreisedatum: rechts in der Listenzeile, mit „in x Tagen“ */
 const WTAGE = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
@@ -1266,11 +1279,11 @@ document.addEventListener('click', e => {
       break;
     }
     case 'selAll': commit({ t: 'selectAll', l: id, val: el.dataset.val === '1' }); break;
-    case 'openList': { introView = null; const st = runState(el.dataset.l); if (!st.rest.length || !st.doneCount) resetRun(el.dataset.l); break; }
+    case 'openList': { introView = null; const st = runState(el.dataset.l); if (!st.doneCount) { delete runs[el.dataset.l]; saveRuns(); } break; } // gemeinsame Häkchen nie automatisch löschen
     case 'runDone': {
       const run = runs[id] || (runs[id] = { done: [], started: true });
       const st = runState(id), ci = st.seq.indexOf(el.dataset.i);
-      if (!run.done.includes(el.dataset.i)) run.done.push(el.dataset.i);
+      commit({ t: 'mark', l: id, i: el.dataset.i, val: true });
       { const f = findItem(view.lists[id], el.dataset.i); if (f && f.item.due && !f.item.dueDone) commit({ t: 'editItem', l: id, i: f.item.id, patch: { dueDone: true } }); }
       const st2 = runState(id); run.cursor = st2.rest.length ? st2.nextOpen(ci, false) : null; saveRuns();
       if (navigator.vibrate) navigator.vibrate(15);
@@ -1279,8 +1292,8 @@ document.addEventListener('click', e => {
     }
     case 'wheelJump': {
       const run = runs[id] || (runs[id] = { done: [], started: true });
-      const x = el.dataset.i, k = run.done.indexOf(x);
-      if (k >= 0) { run.done.splice(k, 1); toast('Wieder offen'); }
+      const x = el.dataset.i;
+      if ((view.lists[id].marks || {})[x]) { commit({ t: 'mark', l: id, i: x, val: false }); toast('Wieder offen'); }
       run.cursor = x; saveRuns(); render(); break;
     }
     case 'runLater': {
@@ -1316,7 +1329,7 @@ document.addEventListener('click', e => {
       }
       resetRun(id); secPick = null; introView = null; render(); toast('Neue Packrunde – alle Punkte offen'); break;
     }
-    case 'finish': resetRun(id); break;
+    case 'finish': delete runs[id]; saveRuns(); break; // nur die eigene Position; die gemeinsamen Häkchen löscht nur „Neue Packrunde“
     case 'itemMenu': itemMenu = itemMenu === el.dataset.i ? null : el.dataset.i; itemPick = null; render(); break;
     case 'dupItem': {
       const f = findItem(view.lists[id], el.dataset.i); if (!f) break;
@@ -1596,7 +1609,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 42;
+const APP_VERSION = 43;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1622,6 +1635,10 @@ let pendingEdit = null;
 window.addEventListener('hashchange', () => { tripEdit = pendingEdit; pendingEdit = null; moveSel = null; render(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sync(); checkUpdate(); } });
 window.addEventListener('online', () => sync());
+setInterval(() => {
+  // alle 20 Sekunden, nur im Vordergrund und nicht während getippt wird
+  if (document.visibilityState === 'visible' && connected() && !document.querySelector('input:focus,textarea:focus')) sync();
+}, 20000);
 boot();
 
 /* Walze: hoch- und runterwischen blättert wie Zurück/Weiter, ohne etwas abzuhaken.
