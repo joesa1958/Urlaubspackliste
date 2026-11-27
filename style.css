@@ -380,3 +380,10 @@ textarea.tnotesview:focus { background: var(--bg); border-radius: 8px; box-shado
 .fillbtn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; margin-bottom: 8px; border: 1.5px solid var(--accent); border-radius: 12px; background: var(--card); color: var(--accent); font: inherit; font-size: 16px; font-weight: 600; }
 .fillwrap { margin-bottom: 4px; }
 .tfield textarea.tarea { font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 40px; box-sizing: border-box; width: 100%; resize: none; overflow: hidden; line-height: 1.4; }
+
+/* Kontakte */
+.contact { padding: 8px 0 10px; border-bottom: 1px solid var(--line); }
+.chead { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; font-size: 17px; }
+.crole { display: block; font-size: 14px; color: var(--muted); font-weight: 400; }
+.cnote { font-size: 15px; color: var(--muted); margin-top: 2px; white-space: pre-line; }
+.cform { padding: 8px 0 12px; border-bottom: 1px solid var(--line); }

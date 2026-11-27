@@ -27,6 +27,7 @@ const fmtTime = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit'
 
 /* ---------- Icons ---------- */
 const I = {
+  user: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20c.8-3.6 3.8-5.5 7.5-5.5s6.7 1.9 7.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   mail: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6h17v12h-17zM3.5 6.5l8.5 6.5 8.5-6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   camera: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4zM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   file: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h7.5l4 4v13h-11.5zM13.5 3.5V8h4.5M9.5 12.5h5M9.5 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -763,7 +764,7 @@ function parseNotes(txt, tripName) {
   return out;
 }
 let tripEdit = null; const geoTried = new Set();
-const ST_FIELDS = ['name', 'room', 'contact', 'place', 'lat', 'lon', 'url', 'accom', 'guest', 'booking', 'price', 'phone', 'email', 'photo', 'docs', 'to'];
+const ST_FIELDS = ['name', 'room', 'contact', 'contacts', 'place', 'lat', 'lon', 'url', 'accom', 'guest', 'booking', 'price', 'phone', 'email', 'photo', 'docs', 'to'];
 /* Stationen einer Reise (ältere Reisen ohne Stationsliste gelten als eine Station „s0“) */
 function stationsOf(id) {
   const L = view.lists[id] || {}, T = L.trip || {};
@@ -840,6 +841,7 @@ function vStation(id, sid) {
   const docs = T.docs || [];
   parts.push(tcard('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-st="${sid}" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed && /\.pdf$/i.test(d.name) ? `<button class="textbtn" data-act="docFill" data-st="${sid}" data-k="${k}">Daten übernehmen</button>` : ''}${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-st="${sid}" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
     + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}" data-st="${sid}">${I.plus || '+'} Dokument hinzufügen</label>`));
+  parts.push(tcard('user', 'Kontakte', contactsHtml(id, sid, T)));
   if (!multi) parts.push(...tripCommon(id, m));
   if (ed && multi) parts.push(stDelBtn(sid));
   if (!multi) parts.push(`<button class="tlink tadd" data-act="addStation" style="border:0;background:none;padding:4px">${I.plus || '+'} Weitere Station hinzufügen (z. B. Zwischenstopp)</button>`);
@@ -854,6 +856,25 @@ function vStation(id, sid) {
   </div>`;
 }
 let stDel = null;
+/* Kontakte einer Station (z. B. Hundepension, Vermieter, Restaurant) – bleiben auch im Archiv erhalten */
+let cEdit = null; // { id, sid, k } – k = -1: neuer Kontakt
+const C_FIELDS = [['name', 'Name', 'text', 'z. B. Hundepension Möwe'], ['role', 'Wofür', 'text', 'z. B. Hund, Fahrräder, Arzt'], ['phone', 'Telefon', 'tel', ''], ['email', 'E-Mail', 'email', ''], ['address', 'Adresse', 'text', 'Straße, Ort'], ['web', 'Webseite', 'url', ''], ['note', 'Notiz', 'text', 'z. B. vorher anrufen']];
+function contactsHtml(id, sid, T) {
+  const cs = T.contacts || [], link = u => esc(/^https?:/i.test(u) ? u : 'https://' + u);
+  const form = k => { const c = k >= 0 ? cs[k] : {};
+    return `<div class="cform">${C_FIELDS.map(([f, l, t, ph]) => `<label class="tfield"><span>${l}</span><input type="${t}" data-cf="${f}" value="${esc(c[f] || '')}" placeholder="${ph}" autocomplete="off"></label>`).join('')}
+      <div class="diffbtns"><button class="secondary" data-act="cCancel">Abbrechen</button><button class="primary" data-act="cSave" data-st="${sid}" data-k="${k}">Speichern</button></div>
+      ${k >= 0 ? `<button class="textbtn" data-act="cDel" data-st="${sid}" data-k="${k}" style="color:#B91C1C;margin-top:6px">Kontakt löschen</button>` : ''}</div>`; };
+  const ed = cEdit && cEdit.id === id && cEdit.sid === sid ? cEdit.k : null;
+  return cs.map((c, k) => ed === k ? form(k) : `<div class="contact">
+      <div class="chead"><div><b>${esc(c.name || 'Kontakt')}</b>${c.role ? `<span class="crole">${esc(c.role)}</span>` : ''}</div><button class="iconbtn small" data-act="cEdit" data-st="${sid}" data-k="${k}" aria-label="Kontakt bearbeiten">${I.edit}</button></div>
+      ${c.phone ? `<a class="tlink" href="tel:${esc(c.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(c.phone)}</a>` : ''}
+      ${c.email ? `<a class="tlink" href="mailto:${esc(c.email)}">${I.mail || ''}${esc(c.email)}</a>` : ''}
+      ${c.address ? `<a class="tlink" href="https://maps.apple.com/?address=${encodeURIComponent(c.address)}&q=${encodeURIComponent(c.name || c.address)}" target="_blank" rel="noopener">${I.mappin || ''}${esc(c.address)}</a>` : ''}
+      ${c.web ? `<a class="tlink" href="${link(c.web)}" target="_blank" rel="noopener">${I.link || ''}Webseite</a>` : ''}
+      ${c.note ? `<div class="cnote">${esc(c.note)}</div>` : ''}</div>`).join('')
+    + (ed === -1 ? form(-1) : `<button class="tlink tadd" data-act="cEdit" data-st="${sid}" data-k="-1">${I.plus || '+'} Kontakt hinzufügen</button>`);
+}
 const stDelBtn = sid => stDel === sid ? `<button class="secondary danger" data-act="delStationYes" data-st="${sid}">Station wirklich löschen</button>` : `<button class="textbtn" data-act="delStation" data-st="${sid}" style="color:var(--danger, #B91C1C)">Station löschen</button>`;
 
 /* Seite 1: Übersicht */
@@ -1419,6 +1440,20 @@ document.addEventListener('click', e => {
     case 'photoDel': { const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}; if (T.photo) { dbxApi('files/delete_v2', { path: T.photo }).catch(() => {}); commit({ t: 'setStation', l: id, s: T.id, patch: { photo: '' } }); } break; }
     case 'docOpen': { const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}, d = (T.docs || [])[+el.dataset.k]; if (d) openTripDoc(id, d.path); break; }
     case 'docDel': docDel = +el.dataset.k; render(); break;
+    case 'cEdit': cEdit = { id, sid: el.dataset.st, k: +el.dataset.k }; render(); { const f = document.querySelector('.cform input'); if (f) f.focus(); } break;
+    case 'cCancel': cEdit = null; render(); break;
+    case 'cSave': {
+      const box = el.closest('.cform'), c = {}; box.querySelectorAll('[data-cf]').forEach(i => { const v = i.value.trim(); if (v) c[i.dataset.cf] = v; });
+      if (!c.name && !c.phone && !c.email) { toast('Bitte mindestens Name, Telefon oder E-Mail eintragen'); break; }
+      const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}, cs = [...(T.contacts || [])], k = +el.dataset.k;
+      if (k >= 0) cs[k] = c; else cs.push(c);
+      cEdit = null; commit({ t: 'setStation', l: id, s: el.dataset.st, patch: { contacts: cs } }); toast(`„${c.name || 'Kontakt'}“ gespeichert`); break;
+    }
+    case 'cDel': {
+      if (el.dataset.sure !== '1') { el.dataset.sure = '1'; el.textContent = 'Wirklich löschen?'; break; }
+      const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}, cs = [...(T.contacts || [])], k = +el.dataset.k, c = cs[k];
+      cs.splice(k, 1); cEdit = null; commit({ t: 'setStation', l: id, s: el.dataset.st, patch: { contacts: cs.length ? cs : '' } }); toast(`„${(c || {}).name || 'Kontakt'}“ gelöscht`); break;
+    }
     case 'docFill': {
       const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}, d = (T.docs || [])[+el.dataset.k]; if (!d) break;
       toast('Lese das PDF …');
@@ -1609,7 +1644,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 43;
+const APP_VERSION = 44;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1632,7 +1667,7 @@ async function boot() {
   sync(); checkUpdate();
 }
 let pendingEdit = null;
-window.addEventListener('hashchange', () => { tripEdit = pendingEdit; pendingEdit = null; moveSel = null; render(); });
+window.addEventListener('hashchange', () => { tripEdit = pendingEdit; pendingEdit = null; cEdit = null; moveSel = null; render(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sync(); checkUpdate(); } });
 window.addEventListener('online', () => sync());
 setInterval(() => {
