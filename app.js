@@ -1165,7 +1165,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 15;
+const APP_VERSION = 16;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1192,29 +1192,48 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('online', () => sync());
 boot();
 
-/* Walze: hoch- und runterwischen blättert wie Zurück/Weiter, ohne etwas abzuhaken */
-let wDrag = null, wSwallow = false;
+/* Walze: hoch- und runterwischen blättert wie Zurück/Weiter, ohne etwas abzuhaken.
+   Die Walze folgt dem Finger, rastet Punkt für Punkt ein und läuft nach schnellem Wischen etwas nach. */
+const W_STEP = 58;
+let wDrag = null, wSwallow = false, wCoast = null;
+const wStep = dir => {
+  const id = route().id, st = id && view.lists[id] ? runState(id) : null; if (!st || !st.cur) return false;
+  const ci = st.seq.indexOf(st.cur), ahead = dir > 0 ? st.seq.slice(ci + 1) : st.seq.slice(0, ci);
+  if (!ahead.some(x => !st.done.has(x))) return false; // beim Wischen nicht über das Listenende hinaus
+  const b = document.querySelector(`[data-act="${dir > 0 ? 'runLater' : 'runBack'}"]`); if (!b || b.disabled) return false; b.click(); return true; };
+const wEl = () => document.querySelector('.wheelwrap .wheel');
+const wSet = (off, anim) => { const el = wEl(); if (!el) return; el.style.animation = 'none'; el.style.transition = anim ? 'transform .22s cubic-bezier(.2,.8,.3,1)' : 'none'; el.style.transform = off ? `translateY(${off}px)` : ''; };
+function wMove(e) {
+  const d = wDrag; if (!d) return;
+  const y = e.touches[0].clientY, t = e.timeStamp;
+  d.vy = (y - d.ly) / Math.max(1, t - d.lt); d.ly = y; d.lt = t;
+  const dy = y - d.y; if (Math.abs(dy) > 6) d.moved = true;
+  if (!d.moved) return;
+  e.preventDefault();
+  let off = dy - d.used;
+  while (off <= -W_STEP / 2 && wStep(1)) { d.used -= W_STEP; off += W_STEP; }
+  while (off >= W_STEP / 2 && wStep(-1)) { d.used += W_STEP; off -= W_STEP; }
+  wSet(Math.max(-W_STEP, Math.min(W_STEP, off)) * 0.9, false);
+}
+function wEnd() {
+  const d = wDrag; if (!d) return; wDrag = null;
+  d.t.removeEventListener('touchmove', wMove); d.t.removeEventListener('touchend', wEnd); d.t.removeEventListener('touchcancel', wEnd);
+  if (!d.moved) return;
+  wSwallow = true; setTimeout(() => { wSwallow = false; }, 450);
+  wSet(0, true);
+  const v = d.vy; // Pixel pro Millisekunde, negativ = nach oben
+  let extra = Math.abs(v) > 0.45 ? Math.min(12, Math.round((Math.abs(v) - 0.3) * 6)) : 0;
+  if (!extra) return;
+  const dir = v < 0 ? 1 : -1; let gap = 55;
+  const tick = () => { if (!extra-- || !wStep(dir)) { wCoast = null; return; } gap *= 1.18; wCoast = setTimeout(tick, gap); };
+  wCoast = setTimeout(tick, 40);
+}
 document.addEventListener('touchstart', e => {
   const w = e.target.closest && e.target.closest('.wheelwrap'); if (!w || e.touches.length !== 1) return;
-  wDrag = { y: e.touches[0].clientY, dy: 0, el: w.querySelector('.wheel') };
+  if (wCoast) { clearTimeout(wCoast); wCoast = null; }
+  const t = e.target, y = e.touches[0].clientY;
+  wDrag = { t, y, ly: y, lt: e.timeStamp, vy: 0, used: 0, moved: false };
+  t.addEventListener('touchmove', wMove, { passive: false }); // am Ziel selbst: es kann beim Neuzeichnen aus der Seite fallen
+  t.addEventListener('touchend', wEnd); t.addEventListener('touchcancel', wEnd);
 }, { passive: true });
-document.addEventListener('touchmove', e => {
-  if (!wDrag) return;
-  wDrag.dy = e.touches[0].clientY - wDrag.y;
-  if (Math.abs(wDrag.dy) > 6) {
-    e.preventDefault();
-    if (wDrag.el) { wDrag.el.style.animation = 'none'; wDrag.el.style.transform = `translateY(${Math.max(-140, Math.min(140, wDrag.dy * 0.6))}px)`; }
-  }
-}, { passive: false });
-const wEnd = () => {
-  if (!wDrag) return; const d = wDrag; wDrag = null;
-  if (d.el) d.el.style.transform = '';
-  if (Math.abs(d.dy) < 24) return;
-  wSwallow = true; setTimeout(() => { wSwallow = false; }, 450);
-  const steps = Math.max(1, Math.min(10, Math.round(Math.abs(d.dy) / 46)));
-  const act = d.dy < 0 ? 'runLater' : 'runBack'; // nach oben wischen = nächster Punkt
-  for (let k = 0; k < steps; k++) { const b = document.querySelector(`[data-act="${act}"]`); if (!b || b.disabled) break; b.click(); }
-};
-document.addEventListener('touchend', wEnd);
-document.addEventListener('touchcancel', wEnd);
 document.addEventListener('click', e => { if (wSwallow && e.target.closest && e.target.closest('.wheelwrap')) { e.stopPropagation(); e.preventDefault(); } }, true);

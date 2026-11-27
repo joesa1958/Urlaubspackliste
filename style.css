@@ -205,7 +205,7 @@ li.placeholder { background: var(--sel); border-top: 1px solid var(--line2); }
 .wheelwrap { align-items: center; gap: 10px; overflow: hidden; }
 .secpill { border: 0; background: var(--accent-soft); color: var(--accent-dark); font-size: 15px; font-weight: 600; padding: 7px 16px; border-radius: 18px; }
 .wheel { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.wheel.roll { animation: wroll .32s ease-out; }
+.wheel.roll { animation: wroll .24s cubic-bezier(.2,.8,.3,1); }
 @keyframes wroll { from { transform: translateY(var(--from)); opacity: .6; } to { transform: none; opacity: 1; } }
 .wslot { border: 0; background: none; padding: 0 8px; max-width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font: inherit; text-align: center; }
 .wslot .wtext { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
