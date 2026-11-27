@@ -667,19 +667,50 @@ async function pdfText(file) {
   for (let n = 1; n <= Math.min(doc.numPages, 6); n++) { const c = await (await doc.getPage(n)).getTextContent(); out += c.items.map(x => x.str + (x.hasEOL ? '\n' : ' ')).join('') + '\n'; }
   return out;
 }
-/* Buchungsdaten aus einem PDF in leere Felder der Station übernehmen */
+/* Buchungsdaten aus einem PDF übernehmen: leere Felder sofort, Abweichungen nur nach Rückfrage (mit Vermerk in den Notizen) */
+const fmtDE = iso => { const x = dParts(iso); return x ? `${String(x[2]).padStart(2, '0')}.${String(x[1]).padStart(2, '0')}.${x[0]}` : iso; };
+function sameVal(k, a, b) {
+  const n = v => String(v || '').toLowerCase().trim();
+  if (k === 'phone' || k === 'price') return n(a).replace(/[^\d]/g, '').replace(/0+$/, '') === n(b).replace(/[^\d]/g, '').replace(/0+$/, '');
+  if (k === 'place') { const x = n(a).replace(/[\s,.-]/g, '').replace(/strasse/g, 'straße'), y = n(b).replace(/[\s,.-]/g, '').replace(/strasse/g, 'straße'); return x.includes(y) || y.includes(x); }
+  if (k === 'url' || k === 'accom') return n(a).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '') === n(b).replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '');
+  return n(a) === n(b);
+}
 async function fillFromPdf(id, sid, file) {
   try {
     const S = stationsOf(id), multi = S.length > 1, T = S.find(y => y.id === sid) || {};
-    const x = parseNotes(await pdfText(file), T.name || meta(id).name), patch = {}, got = [];
+    const x = parseNotes(await pdfText(file), T.name || meta(id).name), patch = {}, got = [], diff = [];
     const names = { place: 'Ort', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', booking: 'Buchungsnummer', price: 'Gesamtpreis', phone: 'Telefon', email: 'E-Mail', accom: 'Unterkunft', url: 'Buchungsseite' };
-    Object.keys(names).forEach(k => { if (x[k] && !T[k]) { patch[k] = x[k]; got.push(names[k]); } });
+    Object.keys(names).forEach(k => { if (!x[k]) return; if (!T[k]) { patch[k] = x[k]; got.push(names[k]); } else if (!sameVal(k, T[k], x[k])) diff.push({ k, label: names[k], old: T[k], neu: x[k] }); });
     if (multi && x.hotel && (!T.name || T.name === 'Neue Station')) { const city = (x.place || '').match(/\d{5}\s+([^,]+)$/); patch.name = city ? city[1].trim() : x.hotel; got.unshift('Name'); }
-    if (!got.length) return 0;
+    if (got.length) { commit({ t: 'setStation', l: id, s: sid, patch }); if (patch.place) geocode(id, sid, patch.place, true); toast('Aus dem PDF übernommen: ' + got.join(', ')); }
+    if (diff.length) askDiffs(id, sid, file.name, diff);
+    return got.length + diff.length;
+  } catch (e) { return -1; /* PDF ohne lesbaren Text: nur als Dokument gespeichert */ }
+}
+function askDiffs(id, sid, fname, diff) {
+  const show = (k, v) => k === 'from' || k === 'to' ? fmtDE(v) : v;
+  const ov = document.createElement('div'); ov.className = 'notesheet';
+  ov.innerHTML = `<div class="notecard" role="dialog" aria-modal="true"><div class="notehead"><b>Abweichungen gefunden</b></div>
+    <div class="notebody" style="font-size:15px"><p style="margin:0 0 10px;color:var(--muted)">In „${esc(fname)}“ stehen andere Angaben als eingetragen. Was soll übernommen werden?</p>
+    ${diff.map((d, n) => `<label class="diffrow"><input type="checkbox" data-n="${n}"><span><b>${esc(d.label)}</b><br><s>${esc(show(d.k, d.old))}</s> → <b>${esc(show(d.k, d.neu))}</b></span></label>`).join('')}</div>
+    <div class="diffbtns"><button class="secondary" data-keep>Beibehalten</button><button class="primary" data-take>Übernehmen</button></div></div>`;
+  ov.addEventListener('click', ev => {
+    if (ev.target.closest('[data-keep]') || ev.target === ov) { ev.stopPropagation(); ov.remove(); return; }
+    if (!ev.target.closest('[data-take]')) return;
+    ev.stopPropagation();
+    const pick = [...ov.querySelectorAll('input[data-n]:checked')].map(i => diff[+i.dataset.n]); ov.remove();
+    if (!pick.length) return;
+    const patch = {}; pick.forEach(d => { patch[d.k] = d.neu; }); if (patch.place) { patch.lat = ''; patch.lon = ''; }
     commit({ t: 'setStation', l: id, s: sid, patch });
     if (patch.place) geocode(id, sid, patch.place, true);
-    toast('Aus dem PDF übernommen: ' + got.join(', ')); return got.length;
-  } catch (e) { return -1; /* PDF ohne lesbaren Text: nur als Dokument gespeichert */ }
+    const now = new Date(), st = (stationsOf(id).find(y => y.id === sid) || {}).name, multi = stationsOf(id).length > 1;
+    const line = `${now.getDate()}.${now.getMonth() + 1}.: ${multi && st ? st + ' – ' : ''}${pick.map(d => `${d.label} von ${show(d.k, d.old)} auf ${show(d.k, d.neu)}`).join(', ')} geändert (aus ${fname})`;
+    const notes = ((view.lists[id] || {}).trip || {}).notes || '';
+    commit({ t: 'setTrip', l: id, patch: { notes: notes ? notes.replace(/\s+$/, '') + '\n' + line : line } });
+    toast(`${pick.length} Angabe${pick.length === 1 ? '' : 'n'} geändert – in den Notizen vermerkt`);
+  });
+  document.body.appendChild(ov);
 }
 async function openTripDoc(id, path) {
   const w = window.open('', '_blank'); // sofort öffnen, sonst blockiert das iPhone das Fenster
@@ -1558,7 +1589,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 36;
+const APP_VERSION = 37;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });

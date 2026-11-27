@@ -369,3 +369,10 @@ textarea.tnotesview:focus { background: var(--bg); border-radius: 8px; box-shado
 .group.archive .card { opacity: .55; }
 .group.archive .listicon { filter: grayscale(1); }
 .group.archive:not(.named) .grouptitle::after { content: " · Archiv"; text-transform: none; letter-spacing: 0; font-weight: 500; }
+
+/* Abweichungen aus PDF */
+.diffrow { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); line-height: 1.4; }
+.diffrow input { width: 22px; height: 22px; margin-top: 2px; flex: none; accent-color: var(--accent); }
+.diffrow s { color: var(--muted); }
+.diffbtns { display: flex; gap: 10px; margin-top: 14px; }
+.diffbtns button { flex: 1; min-height: 48px; }
