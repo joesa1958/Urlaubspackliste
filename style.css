@@ -344,3 +344,6 @@ button.callink { font: inherit; font-size: 15px; font-weight: 600; cursor: point
 .tdue.isdone .tline { text-decoration: line-through; color: var(--muted); }
 .tduecheck { flex: none; width: 28px; height: 28px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); display: grid; place-items: center; padding: 0; }
 .tduecheck.on { background: var(--accent); border-color: var(--accent); }
+
+.listicon.thumb { padding: 0; overflow: hidden; background: var(--line); }
+.listicon.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }

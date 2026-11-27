@@ -678,10 +678,11 @@ function vTrip(id) {
   if (ed) parts.push(card('camera', 'Titelbild', `<label class="tlink filebtn"><input type="file" accept="image/*" data-photo="${id}">${I.camera || ''}${T.photo ? 'Anderes Foto wählen' : 'Foto wählen'}</label>${T.photo ? `<button class="textbtn" data-act="photoDel">Foto entfernen</button>` : ''}`));
   if (ed) parts.push(card('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>Abreise</span><input type="date" data-tripdate="from" value="${esc(L.date || '')}"></label><label class="tfield"><span>Rückkehr</span><input type="date" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
   if (ed || T.place) parts.push(card('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.route || ''}Route in Apple Karten</a>`));
-  if (ed || T.url || T.accom || T.booking || T.price || T.phone || T.email) parts.push(card('ticket', 'Buchung', ed
-    ? inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
+  if (ed || T.url || T.accom || T.guest || T.booking || T.price || T.phone || T.email) parts.push(card('ticket', 'Buchung', ed
+    ? inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
     : `${T.accom ? `<a class="tlink" href="${esc(/^https?:/i.test(T.accom) ? T.accom : 'https://' + T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
        ${T.url ? `<a class="tlink" href="${esc(/^https?:/i.test(T.url) ? T.url : 'https://' + T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
+       ${T.guest ? `<a class="tlink" href="${esc(/^https?:/i.test(T.guest) ? T.guest : 'https://' + T.guest)}" target="_blank" rel="noopener">${I.phone ? '' : ''}${I.link || ''}Gäste-App öffnen</a>` : ''}
        ${T.booking ? `<div class="tline">Buchungsnummer <b>${esc(T.booking)}</b></div>` : ''}
        ${T.price ? `<div class="tline">Gesamtpreis <b>${esc(T.price)}</b></div>` : ''}
        ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}
@@ -695,7 +696,7 @@ function vTrip(id) {
   parts.push(card('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
     + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}">${I.plus || '+'} Dokument hinzufügen</label>`));
   if (ed || T.notes) parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>${T.notes ? `<button class="tlink" data-act="notesFill" style="border:0;background:none;padding:0">${I.link ? '' : ''}↑ Leere Felder aus den Notizen füllen</button>` : ''}` : `<div class="tnotesview">${esc(T.notes)}</div>`));
-  if (!ed && !T.place && !T.url && !T.accom && !T.booking && !T.price && !T.phone && !T.email && !T.notes) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
+  if (!ed && !T.place && !T.url && !T.accom && !T.guest && !T.booking && !T.price && !T.phone && !T.email && !T.notes) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
   const photo = tripPhoto(id);
   if (T.place && !T.lat && !geoTried.has(id) && connected()) { geoTried.add(id); setTimeout(() => geocode(id, T.place, true), 0); }
   return `<div class="screen">
@@ -719,8 +720,9 @@ function vHome() {
       else if (L.lastDone && items.length) stat = `zuletzt gepackt: ${fmtDate(L.lastDone)}`;
       const trip = isTripGroup(gr);
       if (trip && L.date && L.trip && L.trip.to) stat = `${rangeText(L.date, L.trip.to)} · ${stat}`;
+      const thumb = trip ? tripPhoto(l.id) : '';
       return `<a class="row" href="#/${trip ? 'reise' : 'liste'}/${l.id}" ${trip ? '' : `data-act="openList" data-l="${l.id}"`}>
-        ${listIcon(l.icon, l.color)}
+        ${thumb ? `<span class="listicon thumb"><img src="${thumb}" alt=""></span>` : listIcon(l.icon, l.color)}
         <span class="listtext"><span class="listname">${esc(l.name)}</span><span class="liststat">${esc(stat)}</span></span>${dateBadge(L.date)}${I.chev}</a>`;
     }).join('');
     return `<section class="group"><div class="grouphead"><span class="grouptitle">${esc(g)}</span></div><div class="card">${rows || '<div class="empty">Keine Listen in dieser Gruppe</div>'}</div></section>`;
@@ -1429,7 +1431,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 30;
+const APP_VERSION = 31;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
