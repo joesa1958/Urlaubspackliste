@@ -291,6 +291,19 @@ function applyOp(doc, op) {
     case 'lastDone': L.lastDone = op.date; break;
     case 'renameList': L.name = op.name; break;
     case 'setDate': if (op.date) L.date = op.date; else delete L.date; break;
+    case 'setStation': case 'addStation': case 'delStation': case 'mainStation': {
+      // alte Reise-Felder (eine Station) beim ersten Zugriff in die Stationsliste übernehmen
+      const t = L.trip = L.trip || {};
+      if (!t.stations) { const s0 = { id: 's0' }; ST_FIELDS.forEach(k => { if (t[k] != null) { s0[k] = t[k]; delete t[k]; } }); if (L.date) s0.from = L.date; if (s0.name == null) s0.name = L.name || 'Station'; t.stations = [s0]; }
+      if (op.t === 'addStation') { if (!t.stations.some(x => x.id === op.s.id)) t.stations.push({ ...op.s }); }
+      else if (op.t === 'delStation') { t.stations = t.stations.filter(x => x.id !== op.s); if (t.main === op.s) delete t.main; }
+      else if (op.t === 'mainStation') { t.main = op.s; }
+      else { const x = t.stations.find(y => y.id === op.s); if (x) { Object.assign(x, op.patch); Object.keys(x).forEach(k => { if (x[k] === '' || x[k] == null) delete x[k]; }); } }
+      t.stations.sort((a, b) => (a.from || '9999') < (b.from || '9999') ? -1 : (a.from || '9999') > (b.from || '9999') ? 1 : 0);
+      const fr = t.stations.map(x => x.from).filter(Boolean).sort(), to = t.stations.map(x => x.to || x.from).filter(Boolean).sort();
+      if (fr.length) L.date = fr[0]; if (to.length) t.to = to[to.length - 1];
+      break;
+    }
     case 'setTrip': { const t = Object.assign({}, L.trip || {}, op.patch); Object.keys(t).forEach(k => { if (t[k] === '' || t[k] == null) delete t[k]; }); if (Object.keys(t).length) L.trip = t; else delete L.trip; break; }
     case 'setIcon': L.icon = op.icon; break;
     case 'setColor': L.color = op.color; break;
@@ -585,7 +598,7 @@ function tripRel(from, to) {
   const d2 = b ? Math.round((new Date(b[0], b[1] - 1, b[2]) - t0) / 864e5) : d1;
   if (d1 > 1) return `in ${d1} Tagen`; if (d1 === 1) return 'morgen'; if (d2 >= 0) return 'läuft'; return 'vorbei';
 }
-async function geocode(id, place, quiet) {
+async function geocode(id, sid, place, quiet) {
   // erst die ganze Angabe, dann ohne Hausnummer-Bereiche, dann schrittweise ohne die vorderen Teile (z. B. Name der Unterkunft)
   const parts = place.split(',').map(x => x.trim()).filter(Boolean), tries = [place, place.replace(/(\d+)\s*[-–]\s*\d+/g, '$1')];
   for (let k = 1; k < parts.length; k++) tries.push(parts.slice(k).join(', '));
@@ -593,24 +606,25 @@ async function geocode(id, place, quiet) {
     for (const q of [...new Set(tries)]) {
       const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=de&q=' + encodeURIComponent(q));
       const j = await r.json(); const L = view.lists[id];
-      if (j && j[0]) { if (L && L.trip && L.trip.place === place) commit({ t: 'setTrip', l: id, patch: { lat: +(+j[0].lat).toFixed(5), lon: +(+j[0].lon).toFixed(5) } }); return; }
+      if (j && j[0]) { const x = stationsOf(id).find(y => y.id === sid); if (L && x && x.place === place) commit({ t: 'setStation', l: id, s: sid, patch: { lat: +(+j[0].lat).toFixed(5), lon: +(+j[0].lon).toFixed(5) } }); return; }
     }
     if (!quiet) toast('Ort nicht auf der Karte gefunden – die Route funktioniert trotzdem');
   } catch (e) { if (!quiet) toast('Karte gerade nicht erreichbar'); }
 }
 /* Titelbild und Dokumente einer Reise: liegen in der Dropbox unter /reisen/<Liste>/ */
 const photoBusy = new Set();
-function tripPhoto(id) {
-  const T = (view.lists[id] || {}).trip || {}; if (!T.photo) return '';
-  const c = (() => { try { return localStorage.getItem(LS + 'foto:' + T.photo); } catch (e) { return null; } })();
+function photoSrc(path) {
+  if (!path) return '';
+  const c = (() => { try { return localStorage.getItem(LS + 'foto:' + path); } catch (e) { return null; } })();
   if (c) return c;
-  if (!photoBusy.has(T.photo) && connected()) {
-    photoBusy.add(T.photo);
-    dbxGetFile(T.photo).then(b => new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); }))
-      .then(u => { try { localStorage.setItem(LS + 'foto:' + T.photo, u); } catch (e) {} render(); }).catch(() => {});
+  if (!photoBusy.has(path) && connected()) {
+    photoBusy.add(path);
+    dbxGetFile(path).then(b => new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); }))
+      .then(u => { try { localStorage.setItem(LS + 'foto:' + path, u); } catch (e) {} render(); }).catch(() => {});
   }
   return '';
 }
+const tripPhoto = id => { const m = mainStation(id); return photoSrc(m && m.photo) || photoSrc(stationsOf(id).map(x => x.photo).find(Boolean)); };
 async function shrinkImage(file, max = 1400) {
   const url = URL.createObjectURL(file);
   try {
@@ -621,26 +635,48 @@ async function shrinkImage(file, max = 1400) {
     return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
   } finally { URL.revokeObjectURL(url); }
 }
-async function setTripPhoto(id, file) {
+async function setTripPhoto(id, sid, file) {
   toast('Foto wird hochgeladen …');
   try {
-    const blob = await shrinkImage(file), meta_ = await dbxPutFile(`/reisen/${id}/titelbild.jpg`, blob);
-    const old = ((view.lists[id] || {}).trip || {}).photo;
-    commit({ t: 'setTrip', l: id, patch: { photo: meta_.path_display || meta_.path_lower } });
+    const blob = await shrinkImage(file), meta_ = await dbxPutFile(`/reisen/${id}/${sid}-titelbild.jpg`, blob);
+    const old = (stationsOf(id).find(x => x.id === sid) || {}).photo;
+    commit({ t: 'setStation', l: id, s: sid, patch: { photo: meta_.path_display || meta_.path_lower } });
     if (old && old !== meta_.path_display) dbxApi('files/delete_v2', { path: old }).catch(() => {});
     toast('Titelbild gespeichert');
   } catch (e) { toast(e.message || 'Foto konnte nicht gespeichert werden'); }
 }
-async function addTripDocs(id, files) {
+async function addTripDocs(id, sid, files) {
   for (const f of files) {
     toast(`„${f.name}“ wird hochgeladen …`);
     try {
       const m = await dbxPutFile(`/reisen/${id}/${f.name.replace(/[\\/:*?"<>|]+/g, '_')}`, f);
-      const docs = [...((view.lists[id].trip || {}).docs || []), { name: m.name, path: m.path_display || m.path_lower, size: m.size, added: new Date().toISOString().slice(0, 10) }];
-      commit({ t: 'setTrip', l: id, patch: { docs } });
+      const docs = [...((stationsOf(id).find(x => x.id === sid) || {}).docs || []), { name: m.name, path: m.path_display || m.path_lower, size: m.size, added: new Date().toISOString().slice(0, 10) }];
+      commit({ t: 'setStation', l: id, s: sid, patch: { docs } });
       toast(`„${m.name}“ gespeichert`);
+      if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') await fillFromPdf(id, sid, f);
     } catch (e) { toast(e.message || 'Hochladen fehlgeschlagen'); }
   }
+}
+let pdfjs = null;
+async function pdfText(file) {
+  if (!pdfjs) { pdfjs = await import(new URL('lib/pdf.min.mjs', location.href).href); pdfjs.GlobalWorkerOptions.workerSrc = new URL('lib/pdf.worker.min.mjs', location.href).href; }
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise; let out = '';
+  for (let n = 1; n <= Math.min(doc.numPages, 6); n++) { const c = await (await doc.getPage(n)).getTextContent(); out += c.items.map(x => x.str + (x.hasEOL ? '\n' : ' ')).join('') + '\n'; }
+  return out;
+}
+/* Buchungsdaten aus einem PDF in leere Felder der Station übernehmen */
+async function fillFromPdf(id, sid, file) {
+  try {
+    const S = stationsOf(id), multi = S.length > 1, T = S.find(y => y.id === sid) || {};
+    const x = parseNotes(await pdfText(file), T.name || meta(id).name), patch = {}, got = [];
+    const names = { place: 'Ort', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', booking: 'Buchungsnummer', price: 'Gesamtpreis', phone: 'Telefon', email: 'E-Mail', accom: 'Unterkunft', url: 'Buchungsseite' };
+    Object.keys(names).forEach(k => { if (x[k] && !T[k]) { patch[k] = x[k]; got.push(names[k]); } });
+    if (multi && x.hotel && (!T.name || T.name === 'Neue Station')) { const city = (x.place || '').match(/\d{5}\s+([^,]+)$/); patch.name = city ? city[1].trim() : x.hotel; got.unshift('Name'); }
+    if (!got.length) return 0;
+    commit({ t: 'setStation', l: id, s: sid, patch });
+    if (patch.place) geocode(id, sid, patch.place, true);
+    toast('Aus dem PDF übernommen: ' + got.join(', ')); return got.length;
+  } catch (e) { return -1; /* PDF ohne lesbaren Text: nur als Dokument gespeichert */ }
 }
 async function openTripDoc(id, path) {
   const w = window.open('', '_blank'); // sofort öffnen, sonst blockiert das iPhone das Fenster
@@ -655,58 +691,113 @@ function parseNotes(txt, tripName) {
   const urls = [...new Set((t.match(/\b(?:https?:\/\/|www\.)[^\s<>"')]+/gi) || []).map(u => u.replace(/[.,;:]+$/, '')))];
   const bk = urls.find(u => /book|buchung|booking/i.test(u)); if (bk) out.url = bk;
   const ac = urls.find(u => u !== bk); if (ac) out.accom = ac; else if (bk && !out.accom) out.accom = bk;
-  const tel = t.match(/(?:Tel(?:efon)?\.?|Fon|Phone)[^\d+]{0,6}(\+?[\d][\d\s/().-]{5,}\d)/i); if (tel) out.phone = tel[1].replace(/\(0\)/, '').replace(/\s+/g, ' ').trim();
-  const nr = t.match(/(?:Belegnummer|Buchungsnummer|Buchungs-?Nr\.?|Reservierungsnummer|Buchung)\s*:?\s*(\d{4,})/i); if (nr) out.booking = nr[1];
+  const tel = t.match(/(?:Tel(?:efon)?\.?|Fon|Phone)[^\d+]{0,6}(\+?[\d][\d\s/().-]{5,}\d)/i) || t.match(/(?:^|\n)\s*(\+\d{2}[\d\s/().-]{6,}\d)\s*(?:\n|$)/); if (tel) out.phone = tel[1].replace(/\(0\)/, '').replace(/\s+/g, ' ').trim();
+  const nr = [...t.matchAll(/(?:Belegnummer|Buchungsnummer|Buchungs-?Nr\.?|Reservierungsnummer|Bestätigungsnummer|Buchung)\s*:?\s*([A-Z0-9][A-Z0-9#\/-]{3,})/gi)].find(m => /\d/.test(m[1])); if (nr) out.booking = nr[1];
   const pr = t.match(/(?:Gesamtbetrag|Gesamtpreis|Gesamt)\D{0,80}?([\d.]+),(\d{2})/i); if (pr) out.price = `EUR ${pr[1]},${pr[2] === '00' ? '-' : pr[2]}`;
   const dr = t.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})\s*[-–]\s*(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
   if (dr) { const y = v => (v.length === 2 ? '20' + v : v), z = v => v.padStart(2, '0'); out.from = `${y(dr[3])}-${z(dr[2])}-${z(dr[1])}`; out.to = `${y(dr[6])}-${z(dr[5])}-${z(dr[4])}`; }
+  // „Anreise: 23. Dez. 2026“ / „Abreise Datum: 25.12.2026“
+  const MON = { jan: 1, feb: 2, mär: 3, maer: 3, mar: 3, apr: 4, mai: 5, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, okt: 10, oct: 10, nov: 11, dez: 12, dec: 12 };
+  const dOf = str => { let m = str.match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{2,4})/); if (m) return `${m[3].length === 2 ? '20' + m[3] : m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    m = str.match(/(\d{1,2})\.?\s*([A-Za-zÄÖÜäöü]{3})[a-zäöü]*\.?\s*(\d{4})/); if (m && MON[m[2].toLowerCase()]) return `${m[3]}-${String(MON[m[2].toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}`; return ''; };
+  const an = t.match(/(?:Anreise|Check-?in|Ankunft)(?:\s*Datum)?\s*:?\s*([^\n]{6,40})/i), ab = t.match(/(?:Abreise|Check-?out)(?:\s*Datum)?\s*:?\s*([^\n]{6,40})/i);
+  if (an && dOf(an[1])) out.from = dOf(an[1]); if (ab && dOf(ab[1])) out.to = dOf(ab[1]);
   const adr = [...t.matchAll(/([A-ZÄÖÜ][\wäöüß.\- ]*?(?:straße|strasse|str\.|weg|platz|damm|allee|gasse|ring|ufer)\s*[\d][\w\-–]*)\s*,?\s*(\d{5}\s+[A-ZÄÖÜ][\wäöüß\- ]+)/gi)].map(m => `${m[1].trim()}, ${m[2].trim()}`);
   if (adr.length) out.place = adr.find(a => tripName && a.toLowerCase().includes(tripName.toLowerCase())) || adr.find(a => !/postanschrift/i.test(a)) || adr[0];
+  const hotel = t.match(/(?:^|\n)[^\S\n]*(?:Hotel|Unterkunft)[^\S\n]*:[^\S\n]*([^\n]{3,60})/i); if (hotel) out.hotel = hotel[1].trim().replace(/^\[|\]$/g, '');
+  if (out.place && out.hotel && !out.place.toLowerCase().includes(out.hotel.toLowerCase())) out.place = `${out.hotel}, ${out.place}`;
   return out;
 }
 let tripEdit = null; const geoTried = new Set();
-function vTrip(id) {
-  const m = meta(id), L = view.lists[id], T = L.trip || {}, ed = tripEdit === id;
-  const st = runState(id), items = allItems(L), rel = tripRel(L.date, T.to);
-  const dues = items.filter(it => it.due).sort((a, b) => a.due < b.due ? -1 : 1);
-  const card = (icon, title, body) => `<section class="tcard"><div class="tch">${I[icon] || ''}<span>${title}</span></div>${body}</section>`;
-  const inp = (f, label, type = 'text', ph = '') => `<label class="tfield"><span>${label}</span><input type="${type}" data-trip="${f}" value="${esc(T[f] || '')}" placeholder="${ph}" autocomplete="off"></label>`;
-  const apple = T.place ? `https://maps.apple.com/?address=${encodeURIComponent(T.place)}&q=${encodeURIComponent(T.place)}${T.lat ? `&ll=${T.lat},${T.lon}` : ''}` : '';
-  const map = T.lat ? `<a class="tmap" href="${apple}" target="_blank" rel="noopener" aria-label="Ort in Apple Karten öffnen"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=${T.lon - 0.04},${T.lat - 0.018},${T.lon + 0.04},${T.lat + 0.018}&layer=mapnik&marker=${T.lat},${T.lon}" loading="lazy" tabindex="-1" title="Karte"></iframe></a>` : '';
+const ST_FIELDS = ['name', 'place', 'lat', 'lon', 'url', 'accom', 'guest', 'booking', 'price', 'phone', 'email', 'photo', 'docs', 'to'];
+/* Stationen einer Reise (ältere Reisen ohne Stationsliste gelten als eine Station „s0“) */
+function stationsOf(id) {
+  const L = view.lists[id] || {}, T = L.trip || {};
+  if (T.stations) return T.stations;
+  const s0 = { id: 's0', name: L.name || 'Station', from: L.date }; ST_FIELDS.forEach(k => { if (k !== 'name' && T[k] != null) s0[k] = T[k]; }); return [s0];
+}
+function mainStation(id) {
+  const S = stationsOf(id), T = (view.lists[id] || {}).trip || {};
+  const days = x => { const a = dParts(x.from), b = dParts(x.to); return a && b ? (new Date(b[0], b[1] - 1, b[2]) - new Date(a[0], a[1] - 1, a[2])) : 0; };
+  return S.find(x => x.id === T.main) || S.slice().sort((a, b) => days(b) - days(a))[0];
+}
+const nights = x => { const a = dParts(x.from), b = dParts(x.to); if (!a || !b) return ''; const n = Math.round((new Date(b[0], b[1] - 1, b[2]) - new Date(a[0], a[1] - 1, a[2])) / 864e5); return n > 0 ? `${n} ${n === 1 ? 'Nacht' : 'Nächte'}` : ''; };
+const tcard = (icon, title, body, extra = '') => `<section class="tcard ${extra}"><div class="tch">${I[icon] || ''}<span>${title}</span></div>${body}</section>`;
+function tripCommon(id, m) {
+  // Termine, Packliste und Notizen gelten für die ganze Reise
+  const L = view.lists[id], T = L.trip || {}, st = runState(id), items = allItems(L), parts = [];
+  const dues = items.filter(it => it.due).sort((a, b) => (a.dueDone ? 1 : 0) - (b.dueDone ? 1 : 0) || (a.due < b.due ? -1 : 1));
+  if (dues.length) parts.push(tcard('cal', 'Termine', dues.map(it => `<div class="tdue ${it.dueDone ? 'isdone' : ''}"><button class="tduecheck ${it.dueDone ? 'on' : ''}" data-act="dueDone" data-i="${it.id}" aria-label="„${esc(it.text)}“ ${it.dueDone ? 'wieder offen' : 'erledigt'}">${it.dueDone ? I.tick(16, '#fff', 2.6) : ''}</button><div style="flex:1;min-width:0"><div class="tline">${esc(it.text)}</div>${dueBadge(it.due, 'duebadge', it.dueDone)}</div>${it.dueDone ? '' : calLink(it, m.name)}</div>`).join('')));
   const packed = st.total ? `${st.doneCount} von ${st.total} erledigt` : items.length ? 'noch nichts ausgewählt' : 'noch leer';
-  const parts = [];
-  if (ed) parts.push(card('camera', 'Titelbild', `<label class="tlink filebtn"><input type="file" accept="image/*" data-photo="${id}">${I.camera || ''}${T.photo ? 'Anderes Foto wählen' : 'Foto wählen'}</label>${T.photo ? `<button class="textbtn" data-act="photoDel">Foto entfernen</button>` : ''}`));
-  if (ed) parts.push(card('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>Abreise</span><input type="date" data-tripdate="from" value="${esc(L.date || '')}"></label><label class="tfield"><span>Rückkehr</span><input type="date" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
-  if (ed || T.place) parts.push(card('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.mappin || ''}In Apple Karten</a>`));
-  if (ed || T.url || T.accom || T.guest || T.booking || T.price || T.phone || T.email) parts.push(card('ticket', 'Buchung', ed
-    ? inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
-    : `${T.accom ? `<a class="tlink" href="${esc(/^https?:/i.test(T.accom) ? T.accom : 'https://' + T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
-       ${T.url ? `<a class="tlink" href="${esc(/^https?:/i.test(T.url) ? T.url : 'https://' + T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
-       ${T.guest ? `<a class="tlink" href="${esc(/^https?:/i.test(T.guest) ? T.guest : 'https://' + T.guest)}" target="_blank" rel="noopener">${I.phone ? '' : ''}${I.link || ''}Gäste-App öffnen</a>` : ''}
-       ${T.booking ? `<div class="tline">Buchungsnummer <b>${esc(T.booking)}</b></div>` : ''}
-       ${T.price ? `<div class="tline">Gesamtpreis <b>${esc(T.price)}</b></div>` : ''}
-       ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}
-       ${T.email ? `<a class="tlink" href="mailto:${esc(T.email)}">${I.mail || ''}${esc(T.email)}</a>` : ''}`));
-  dues.sort((a, b) => (a.dueDone ? 1 : 0) - (b.dueDone ? 1 : 0));
-  if (dues.length) parts.push(card('cal', 'Termine', dues.map(it => `<div class="tdue ${it.dueDone ? 'isdone' : ''}"><button class="tduecheck ${it.dueDone ? 'on' : ''}" data-act="dueDone" data-i="${it.id}" aria-label="„${esc(it.text)}“ ${it.dueDone ? 'wieder offen' : 'erledigt'}">${it.dueDone ? I.tick(16, '#fff', 2.6) : ''}</button><div style="flex:1;min-width:0"><div class="tline">${esc(it.text)}</div>${dueBadge(it.due, 'duebadge', it.dueDone)}</div>${it.dueDone ? '' : calLink(it, m.name)}</div>`).join('')));
-  else if (ed) parts.push(card('cal', 'Termine', `<p class="hint" style="margin:0">Termine setzt du an einzelnen Punkten der Packliste (Bearbeiten › Kopier-Symbol mit „T“). Sie erscheinen dann hier.</p>`));
   parts.push(`<a class="tcard tpack" href="#/liste/${id}" data-act="openList" data-l="${id}"><div class="tch">${I.suitcase}<span>Packliste</span></div>
     <div class="tpackrow"><span>${packed}</span>${I.chev}</div>${st.total ? `<div class="tprog"><div style="width:${Math.round(st.doneCount / st.total * 100)}%"></div></div>` : ''}</a>`);
-  const docs = T.docs || [];
-  parts.push(card('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
-    + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}">${I.plus || '+'} Dokument hinzufügen</label>`));
-  parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>${T.notes ? `<button class="tlink" data-act="notesFill" style="border:0;background:none;padding:0">${I.link ? '' : ''}↑ Leere Felder aus den Notizen füllen</button>` : ''}` : `<textarea class="tnotesview" data-trip="notes" rows="1" placeholder="Notiz hinzufügen …" aria-label="Notizen">${esc(T.notes || '')}</textarea>`));
-  if (false) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
-  const photo = tripPhoto(id);
-  if (T.place && !T.lat && !geoTried.has(id) && connected()) { geoTried.add(id); setTimeout(() => geocode(id, T.place, true), 0); }
+  parts.push(tcard('note', 'Notizen', `<textarea class="tnotesview" data-trip="notes" rows="1" placeholder="Notiz hinzufügen …" aria-label="Notizen">${esc(T.notes || '')}</textarea>`));
+  return parts;
+}
+function heroHtml(photo, color, back, backLabel, title, sub, right) {
+  return `<header class="hero trip ${photo ? '' : 'nophoto'}" style="--herobg:${FARBEN[color][1]}">${photo ? `<img src="${photo}" alt="">` : ''}<div class="inner">
+      <div class="bar"><a class="back" href="${back}">${I.back}${backLabel}</a><div class="icons">${refreshBtn()}${right}</div></div>
+      <div><h1>${esc(title)}</h1>${sub ? `<div class="herosub">${sub}</div>` : ''}</div></div></header>`;
+}
+function vTrip(id) {
+  const S = stationsOf(id);
+  return S.length > 1 ? vTripOverview(id) : vStation(id, S[0].id);
+}
+function vTripOverview(id) {
+  const m = meta(id), L = view.lists[id], T = L.trip || {}, S = stationsOf(id), main = mainStation(id), rel = tripRel(L.date, T.to);
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = S.map(x => { const past = (x.to || x.from || '9') < today, ms = main && main.id === x.id;
+    return `<a class="tst ${past ? 'past' : ''}" href="#/reise/${id}/${x.id}"><span class="tstdot"></span><span class="tstline"></span>
+      <span class="tsttext"><span class="tstname">${esc(x.name || 'Station')}${ms ? ' <span class="tstmain" title="Hauptstation">★</span>' : ''}</span>
+      <span class="tstsub">${[rangeText(x.from, x.to), nights(x), x.place].filter(Boolean).map(esc).join(' · ') || 'noch ohne Angaben'}</span></span>${I.chev}</a>`; }).join('');
+  const parts = [tcard('mappin', 'Stationen', rows + `<button class="tlink tadd" data-act="addStation">${I.plus || '+'} Station hinzufügen</button>`, 'tstations'), ...tripCommon(id, m)];
   return `<div class="screen">
-    <header class="hero trip ${photo ? '' : 'nophoto'}" style="--herobg:${FARBEN[m.color][1]}">${photo ? `<img src="${photo}" alt="">` : ''}<div class="inner">
-      <div class="bar"><a class="back" href="#/">${I.back}Reisen</a><div class="icons">${refreshBtn()}${ed ? `<button class="iconbtn txt" data-act="tripEdit">Fertig</button>` : `<button class="iconbtn" data-act="tripEdit" aria-label="Reise bearbeiten">${I.edit}</button>`}</div></div>
-      <div><h1>${esc(m.name)}</h1>${L.date ? `<div class="herosub">${rangeText(L.date, T.to)}${rel ? ` · <b>${rel}</b>` : ''}</div>` : ''}</div></div></header>
+    ${heroHtml(tripPhoto(id), m.color, '#/', 'Reisen', m.name, L.date ? `${rangeText(L.date, T.to)}${rel ? ` · <b>${rel}</b>` : ''}` : '', '')}
     <main class="content">${parts.join('')}</main>
     <a class="foot" href="#/einstellungen" data-status></a>
   </div>`;
 }
+function vStation(id, sid) {
+  const m = meta(id), L = view.lists[id], S = stationsOf(id), multi = S.length > 1;
+  const T = S.find(x => x.id === sid) || S[0]; sid = T.id;
+  const ed = tripEdit === id + ':' + sid, main = mainStation(id);
+  const inp = (f, label, type = 'text', ph = '') => `<label class="tfield"><span>${label}</span><input type="${type}" data-st="${sid}" data-trip="${f}" value="${esc(T[f] || '')}" placeholder="${ph}" autocomplete="off"></label>`;
+  const apple = T.place ? `https://maps.apple.com/?address=${encodeURIComponent(T.place)}&q=${encodeURIComponent(T.place)}${T.lat ? `&ll=${T.lat},${T.lon}` : ''}` : '';
+  const map = T.lat ? `<a class="tmap" href="${apple}" target="_blank" rel="noopener" aria-label="Ort in Apple Karten öffnen"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=${T.lon - 0.04},${T.lat - 0.018},${T.lon + 0.04},${T.lat + 0.018}&layer=mapnik&marker=${T.lat},${T.lon}" loading="lazy" tabindex="-1" title="Karte"></iframe></a>` : '';
+  const link = u => esc(/^https?:/i.test(u) ? u : 'https://' + u);
+  const parts = [];
+  if (ed) parts.push(tcard('camera', 'Titelbild', `<label class="tlink filebtn"><input type="file" accept="image/*" data-photo="${id}" data-st="${sid}">${I.camera || ''}${T.photo ? 'Anderes Foto wählen' : 'Foto wählen'}</label>${T.photo ? `<button class="textbtn" data-act="photoDel" data-st="${sid}">Foto entfernen</button>` : ''}`));
+  if (ed && multi) parts.push(tcard('mappin', 'Station', inp('name', 'Name der Station', 'text', 'z. B. Hamburg') + `<button class="kindbtn ${main && main.id === sid ? 'task' : ''}" data-act="mainStation" data-st="${sid}">★ Hauptstation${main && main.id === sid ? '' : ' machen'}</button>`));
+  if (ed) parts.push(tcard('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>${multi ? 'Anreise' : 'Abreise'}</span><input type="date" data-st="${sid}" data-trip="from" value="${esc(T.from || '')}"></label><label class="tfield"><span>${multi ? 'Abreise' : 'Rückkehr'}</span><input type="date" data-st="${sid}" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
+  if (ed || T.place) parts.push(tcard('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" data-st="${sid}" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.mappin || ''}In Apple Karten</a>`));
+  if (ed || T.url || T.accom || T.guest || T.booking || T.price || T.phone || T.email) parts.push(tcard('ticket', 'Buchung', ed
+    ? inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
+    : `${T.accom ? `<a class="tlink" href="${link(T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
+       ${T.url ? `<a class="tlink" href="${link(T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
+       ${T.guest ? `<a class="tlink" href="${link(T.guest)}" target="_blank" rel="noopener">${I.link || ''}Gäste-App öffnen</a>` : ''}
+       ${T.booking ? `<div class="tline">Buchungsnummer <b>${esc(T.booking)}</b></div>` : ''}
+       ${T.price ? `<div class="tline">Gesamtpreis <b>${esc(T.price)}</b></div>` : ''}
+       ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}
+       ${T.email ? `<a class="tlink" href="mailto:${esc(T.email)}">${I.mail || ''}${esc(T.email)}</a>` : ''}`));
+  const docs = T.docs || [];
+  parts.push(tcard('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-st="${sid}" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed && /\.pdf$/i.test(d.name) ? `<button class="textbtn" data-act="docFill" data-st="${sid}" data-k="${k}">Daten übernehmen</button>` : ''}${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-st="${sid}" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
+    + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}" data-st="${sid}">${I.plus || '+'} Dokument hinzufügen</label>`));
+  if (!multi) parts.push(...tripCommon(id, m));
+  if (ed && (L.trip || {}).notes) parts.push(`<button class="tlink" data-act="notesFill" data-st="${sid}" style="border:0;background:none;padding:0 4px">↑ Leere Felder aus den Notizen ${multi ? 'der Reise ' : ''}füllen</button>`);
+  if (ed && multi) parts.push(stDelBtn(sid));
+  if (!multi) parts.push(`<button class="tlink tadd" data-act="addStation" style="border:0;background:none;padding:4px">${I.plus || '+'} Weitere Station hinzufügen (z. B. Zwischenstopp)</button>`);
+  if (T.place && !T.lat && !geoTried.has(id + sid) && connected()) { geoTried.add(id + sid); setTimeout(() => geocode(id, sid, T.place, true), 0); }
+  const title = multi ? (T.name || 'Station') : m.name;
+  const sub = T.from ? `${rangeText(T.from, T.to)}${multi && nights(T) ? ' · ' + nights(T) : ''}${!multi && tripRel(T.from, T.to) ? ` · <b>${tripRel(T.from, T.to)}</b>` : ''}` : '';
+  return `<div class="screen">
+    ${heroHtml(photoSrc(T.photo) || (multi ? '' : tripPhoto(id)), m.color, multi ? `#/reise/${id}` : '#/', multi ? esc(m.name) : 'Reisen', title, sub,
+      ed ? `<button class="iconbtn txt" data-act="tripEdit" data-st="${sid}">Fertig</button>` : `<button class="iconbtn" data-act="tripEdit" data-st="${sid}" aria-label="Bearbeiten">${I.edit}</button>`)}
+    <main class="content">${parts.join('')}</main>
+    <a class="foot" href="#/einstellungen" data-status></a>
+  </div>`;
+}
+let stDel = null;
+const stDelBtn = sid => stDel === sid ? `<button class="secondary danger" data-act="delStationYes" data-st="${sid}">Station wirklich löschen</button>` : `<button class="textbtn" data-act="delStation" data-st="${sid}" style="color:var(--danger, #B91C1C)">Station löschen</button>`;
 
 /* Seite 1: Übersicht */
 function vHome() {
@@ -719,7 +810,7 @@ function vHome() {
       if (st.started && st.rest.length) stat = `${st.doneCount} von ${st.total} eingepackt`;
       else if (L.lastDone && items.length) stat = `zuletzt gepackt: ${fmtDate(L.lastDone)}`;
       const trip = isTripGroup(gr);
-      if (trip && L.date && L.trip && L.trip.to) stat = `${rangeText(L.date, L.trip.to)} · ${stat}`;
+      if (trip && L.date && L.trip && L.trip.to) { const S = stationsOf(l.id); stat = `${rangeText(L.date, L.trip.to)} · ${S.length > 1 ? S.map(x => x.name || 'Station').join(' → ') : stat}`; }
       const thumb = trip ? tripPhoto(l.id) : '';
       return `<a class="row" href="#/${trip ? 'reise' : 'liste'}/${l.id}" ${trip ? '' : `data-act="openList" data-l="${l.id}"`}>
         ${thumb ? `<span class="listicon thumb"><img src="${thumb}" alt=""></span>` : listIcon(l.icon, l.color)}
@@ -1078,7 +1169,7 @@ function route() {
   const h = location.hash.replace(/^#\/?/, '').split('/');
   if (h[0] === 'listen') return { v: 'lists' };
   if (h[0] === 'liste' && meta(h[1])) return { v: h[2] === 'auswahl' ? 'select' : h[2] === 'bearbeiten' ? 'edit' : 'run', id: h[1] };
-  if (h[0] === 'reise' && meta(h[1])) return { v: 'trip', id: h[1] };
+  if (h[0] === 'reise' && meta(h[1])) return { v: 'trip', id: h[1], sid: h[2] || '' };
   if (h[0] === 'einstellungen') return { v: 'settings' };
   return { v: 'home' };
 }
@@ -1104,9 +1195,9 @@ function applyTheme(r) {
   const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#F6F4EF';
 }
 function render() {
-  const r = route(); const key = r.v + (r.id || '');
+  const r = route(); const key = r.v + (r.id || '') + (r.sid || '');
   const sy = key === lastRouteKey ? window.scrollY : 0;
-  const html = !connected() ? vLogin() : r.v === 'select' ? vSelect(r.id) : r.v === 'run' ? vRun(r.id) : r.v === 'edit' ? vEdit(r.id) : r.v === 'settings' ? vSettings() : r.v === 'trip' ? vTrip(r.id) : r.v === 'lists' ? vLists() : vHome();
+  const html = !connected() ? vLogin() : r.v === 'select' ? vSelect(r.id) : r.v === 'run' ? vRun(r.id) : r.v === 'edit' ? vEdit(r.id) : r.v === 'settings' ? vSettings() : r.v === 'trip' ? (r.sid ? vStation(r.id, r.sid) : vTrip(r.id)) : r.v === 'lists' ? vLists() : vHome();
   applyTheme(r);
   $('#app').innerHTML = html;
   renderStatus();
@@ -1244,24 +1335,44 @@ document.addEventListener('click', e => {
       document.body.appendChild(ov); break;
     }
     case 'calAdd': case 'calShare': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) calAdd(f.item, meta(r.id).name, act === 'calShare'); break; }
-    case 'tripEdit': tripEdit = tripEdit === id ? null : id; docDel = null; render(); break;
+    case 'tripEdit': { const k = id + ':' + el.dataset.st; tripEdit = tripEdit === k ? null : k; docDel = null; stDel = null; render(); break; }
+    case 'addStation': {
+      const nid = 'st' + uid().slice(0, 6), S = stationsOf(id), last = S[S.length - 1] || {};
+      commit({ t: 'addStation', l: id, s: { id: nid, name: 'Neue Station', from: last.to || '' } });
+      pendingEdit = id + ':' + nid; location.hash = `#/reise/${id}/${nid}`; toast('Station angelegt – jetzt Name, Zeitraum und Unterkunft eintragen'); break;
+    }
+    case 'mainStation': commit({ t: 'mainStation', l: id, s: el.dataset.st }); toast('Hauptstation gesetzt – ihr Bild erscheint auf der Startseite'); break;
+    case 'delStation': stDel = el.dataset.st; render(); break;
+    case 'delStationYes': {
+      const x = stationsOf(id).find(y => y.id === el.dataset.st); stDel = null; tripEdit = null;
+      if (x) { (x.docs || []).forEach(d => dbxApi('files/delete_v2', { path: d.path }).catch(() => {})); if (x.photo) dbxApi('files/delete_v2', { path: x.photo }).catch(() => {}); commit({ t: 'delStation', l: id, s: x.id }); toast(`„${x.name || 'Station'}“ gelöscht`); }
+      location.hash = `#/reise/${id}`; break;
+    }
     case 'notesFill': {
-      const L = view.lists[id], T = L.trip || {}, x = parseNotes(T.notes || '', meta(id).name), patch = {}, got = [];
-      const names = { email: 'E-Mail', url: 'Buchungsseite', accom: 'Unterkunft', phone: 'Telefon', booking: 'Buchungsnummer', price: 'Gesamtpreis', to: 'Rückkehr', place: 'Ort' };
+      const L = view.lists[id], sid = el.dataset.st, S = stationsOf(id), T = S.find(y => y.id === sid) || {}, multi = S.length > 1;
+      const x = parseNotes((L.trip || {}).notes || '', T.name || meta(id).name), patch = {}, got = [];
+      const names = { email: 'E-Mail', url: 'Buchungsseite', accom: 'Unterkunft', phone: 'Telefon', booking: 'Buchungsnummer', price: 'Gesamtpreis', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', place: 'Ort' };
       Object.keys(names).forEach(k => { if (x[k] && !T[k]) { patch[k] = x[k]; got.push(names[k]); } });
-      if (x.from && !L.date) { commit({ t: 'setDate', l: id, date: x.from }); got.unshift('Abreise'); }
-      if (Object.keys(patch).length) commit({ t: 'setTrip', l: id, patch });
-      if (patch.place) geocode(id, patch.place, true);
+      if (Object.keys(patch).length) commit({ t: 'setStation', l: id, s: sid, patch });
+      if (patch.place) geocode(id, sid, patch.place, true);
       toast(got.length ? 'Übernommen: ' + got.join(', ') : 'Nichts Neues gefunden – ausgefüllte Felder bleiben unverändert');
       break;
     }
-    case 'geoRetry': { const T = view.lists[id].trip || {}; if (T.place) { toast('Suche den Ort …'); geocode(id, T.place); } break; }
-    case 'photoDel': { const T = view.lists[id].trip || {}; if (T.photo) { dbxApi('files/delete_v2', { path: T.photo }).catch(() => {}); commit({ t: 'setTrip', l: id, patch: { photo: '' } }); } break; }
-    case 'docOpen': { const d = ((view.lists[id].trip || {}).docs || [])[+el.dataset.k]; if (d) openTripDoc(id, d.path); break; }
+    case 'geoRetry': { const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}; if (T.place) { toast('Suche den Ort …'); geocode(id, T.id, T.place); } break; }
+    case 'photoDel': { const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}; if (T.photo) { dbxApi('files/delete_v2', { path: T.photo }).catch(() => {}); commit({ t: 'setStation', l: id, s: T.id, patch: { photo: '' } }); } break; }
+    case 'docOpen': { const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}, d = (T.docs || [])[+el.dataset.k]; if (d) openTripDoc(id, d.path); break; }
     case 'docDel': docDel = +el.dataset.k; render(); break;
+    case 'docFill': {
+      const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}, d = (T.docs || [])[+el.dataset.k]; if (!d) break;
+      toast('Lese das PDF …');
+      dbxGetFile(d.path).then(b => fillFromPdf(id, T.id, new File([b], d.name, { type: 'application/pdf' })))
+        .then(n => { if (n === 0) toast('Nichts Neues gefunden – ausgefüllte Felder bleiben unverändert'); else if (n < 0) toast('In diesem PDF ist kein lesbarer Text'); })
+        .catch(() => toast('PDF nicht erreichbar – besteht eine Verbindung?'));
+      break;
+    }
     case 'docDelYes': {
-      const docs = [...((view.lists[id].trip || {}).docs || [])], d = docs[+el.dataset.k]; docDel = null;
-      if (d) { docs.splice(+el.dataset.k, 1); commit({ t: 'setTrip', l: id, patch: { docs: docs.length ? docs : '' } }); dbxApi('files/delete_v2', { path: d.path }).catch(() => {}); toast(`„${d.name}“ gelöscht`); }
+      const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}, docs = [...(T.docs || [])], d = docs[+el.dataset.k]; docDel = null;
+      if (d) { docs.splice(+el.dataset.k, 1); commit({ t: 'setStation', l: id, s: T.id, patch: { docs: docs.length ? docs : '' } }); dbxApi('files/delete_v2', { path: d.path }).catch(() => {}); toast(`„${d.name}“ gelöscht`); }
       break;
     }
     case 'groupTrip': { const g = view.groups.find(x => x.id === el.dataset.g); if (g) { const on = !isTripGroup(g); commit({ t: 'groupTrip', g: g.id, val: on }); toast(on ? `„${g.name}“: Einträge öffnen jetzt die Reise-Seite` : `„${g.name}“: Einträge öffnen direkt die Liste`); } break; }
@@ -1351,8 +1462,17 @@ document.addEventListener('submit', async e => {
   }
 });
 document.addEventListener('change', async e => {
-  if (e.target.matches('input[data-photo]')) { const f = e.target.files && e.target.files[0]; if (f) setTripPhoto(e.target.dataset.photo, f); return; }
-  if (e.target.matches('input[data-docs]')) { const fs = [...(e.target.files || [])]; if (fs.length) addTripDocs(e.target.dataset.docs, fs); return; }
+  if (e.target.matches('input[data-photo]')) { const f = e.target.files && e.target.files[0]; if (f) setTripPhoto(e.target.dataset.photo, e.target.dataset.st, f); return; }
+  if (e.target.matches('input[data-docs]')) { const fs = [...(e.target.files || [])]; if (fs.length) addTripDocs(e.target.dataset.docs, e.target.dataset.st, fs); return; }
+  if (e.target.matches('[data-st][data-trip]')) {
+    const r = route(); if (!view.lists[r.id]) return;
+    const v = (e.target.value || '').trim(), sid = e.target.dataset.st, f = e.target.dataset.trip, T = stationsOf(r.id).find(y => y.id === sid) || {};
+    if (v === (T[f] || '')) return;
+    const patch = { [f]: v }; if (f === 'place') { patch.lat = ''; patch.lon = ''; }
+    commit({ t: 'setStation', l: r.id, s: sid, patch });
+    if (f === 'place' && v) geocode(r.id, sid, v);
+    return;
+  }
   if (e.target.matches('[data-trip], [data-tripdate]')) {
     const r = route(); if (!view.lists[r.id]) return;
     const v = (e.target.value || '').trim();
@@ -1431,7 +1551,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 33;
+const APP_VERSION = 35;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1453,7 +1573,8 @@ async function boot() {
   render();
   sync(); checkUpdate();
 }
-window.addEventListener('hashchange', () => { tripEdit = null; moveSel = null; render(); });
+let pendingEdit = null;
+window.addEventListener('hashchange', () => { tripEdit = pendingEdit; pendingEdit = null; moveSel = null; render(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sync(); checkUpdate(); } });
 window.addEventListener('online', () => sync());
 boot();
