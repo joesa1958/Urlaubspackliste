@@ -648,6 +648,22 @@ async function openTripDoc(id, path) {
   catch (e) { if (w) w.close(); toast('Dokument nicht erreichbar – besteht eine Verbindung?'); }
 }
 let docDel = null;
+/* Leere Reise-Felder aus dem Notiztext füllen (z. B. eingefügte Buchungsbestätigung); nur auf dem iPhone, nichts wird verschickt */
+function parseNotes(txt, tripName) {
+  const out = {}, t = txt.replace(/\r/g, '');
+  const mails = (t.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g) || []).filter(m => !new RegExp('^(?:An|To|Cc)\\s*:.*' + m.replace(/[.+]/g, '\\$&'), 'mi').test(t)); if (mails.length) out.email = mails[mails.length - 1]; // Kontakt steht meist am Ende; Empfänger (An:) nicht
+  const urls = [...new Set((t.match(/\b(?:https?:\/\/|www\.)[^\s<>"')]+/gi) || []).map(u => u.replace(/[.,;:]+$/, '')))];
+  const bk = urls.find(u => /book|buchung|booking/i.test(u)); if (bk) out.url = bk;
+  const ac = urls.find(u => u !== bk); if (ac) out.accom = ac; else if (bk && !out.accom) out.accom = bk;
+  const tel = t.match(/(?:Tel(?:efon)?\.?|Fon|Phone)[^\d+]{0,6}(\+?[\d][\d\s/().-]{5,}\d)/i); if (tel) out.phone = tel[1].replace(/\(0\)/, '').replace(/\s+/g, ' ').trim();
+  const nr = t.match(/(?:Belegnummer|Buchungsnummer|Buchungs-?Nr\.?|Reservierungsnummer|Buchung)\s*:?\s*(\d{4,})/i); if (nr) out.booking = nr[1];
+  const pr = t.match(/(?:Gesamtbetrag|Gesamtpreis|Gesamt)\D{0,80}?([\d.]+),(\d{2})/i); if (pr) out.price = `EUR ${pr[1]},${pr[2] === '00' ? '-' : pr[2]}`;
+  const dr = t.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})\s*[-–]\s*(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+  if (dr) { const y = v => (v.length === 2 ? '20' + v : v), z = v => v.padStart(2, '0'); out.from = `${y(dr[3])}-${z(dr[2])}-${z(dr[1])}`; out.to = `${y(dr[6])}-${z(dr[5])}-${z(dr[4])}`; }
+  const adr = [...t.matchAll(/([A-ZÄÖÜ][\wäöüß.\- ]*?(?:straße|strasse|str\.|weg|platz|damm|allee|gasse|ring|ufer)\s*[\d][\w\-–]*)\s*,?\s*(\d{5}\s+[A-ZÄÖÜ][\wäöüß\- ]+)/gi)].map(m => `${m[1].trim()}, ${m[2].trim()}`);
+  if (adr.length) out.place = adr.find(a => tripName && a.toLowerCase().includes(tripName.toLowerCase())) || adr.find(a => !/postanschrift/i.test(a)) || adr[0];
+  return out;
+}
 let tripEdit = null; const geoTried = new Set();
 function vTrip(id) {
   const m = meta(id), L = view.lists[id], T = L.trip || {}, ed = tripEdit === id;
@@ -677,7 +693,7 @@ function vTrip(id) {
   const docs = T.docs || [];
   parts.push(card('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
     + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}">${I.plus || '+'} Dokument hinzufügen</label>`));
-  if (ed || T.notes) parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>` : `<div class="tnotesview">${esc(T.notes)}</div>`));
+  if (ed || T.notes) parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>${T.notes ? `<button class="tlink" data-act="notesFill" style="border:0;background:none;padding:0">${I.link ? '' : ''}↑ Leere Felder aus den Notizen füllen</button>` : ''}` : `<div class="tnotesview">${esc(T.notes)}</div>`));
   if (!ed && !T.place && !T.url && !T.accom && !T.booking && !T.price && !T.phone && !T.email && !T.notes) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
   const photo = tripPhoto(id);
   if (T.place && !T.lat && !geoTried.has(id) && connected()) { geoTried.add(id); setTimeout(() => geocode(id, T.place, true), 0); }
@@ -1225,6 +1241,16 @@ document.addEventListener('click', e => {
     }
     case 'calAdd': case 'calShare': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) calAdd(f.item, meta(r.id).name, act === 'calShare'); break; }
     case 'tripEdit': tripEdit = tripEdit === id ? null : id; docDel = null; render(); break;
+    case 'notesFill': {
+      const L = view.lists[id], T = L.trip || {}, x = parseNotes(T.notes || '', meta(id).name), patch = {}, got = [];
+      const names = { email: 'E-Mail', url: 'Buchungsseite', accom: 'Unterkunft', phone: 'Telefon', booking: 'Buchungsnummer', price: 'Gesamtpreis', to: 'Rückkehr', place: 'Ort' };
+      Object.keys(names).forEach(k => { if (x[k] && !T[k]) { patch[k] = x[k]; got.push(names[k]); } });
+      if (x.from && !L.date) { commit({ t: 'setDate', l: id, date: x.from }); got.unshift('Abreise'); }
+      if (Object.keys(patch).length) commit({ t: 'setTrip', l: id, patch });
+      if (patch.place) geocode(id, patch.place, true);
+      toast(got.length ? 'Übernommen: ' + got.join(', ') : 'Nichts Neues gefunden – ausgefüllte Felder bleiben unverändert');
+      break;
+    }
     case 'geoRetry': { const T = view.lists[id].trip || {}; if (T.place) { toast('Suche den Ort …'); geocode(id, T.place); } break; }
     case 'photoDel': { const T = view.lists[id].trip || {}; if (T.photo) { dbxApi('files/delete_v2', { path: T.photo }).catch(() => {}); commit({ t: 'setTrip', l: id, patch: { photo: '' } }); } break; }
     case 'docOpen': { const d = ((view.lists[id].trip || {}).docs || [])[+el.dataset.k]; if (d) openTripDoc(id, d.path); break; }
@@ -1400,7 +1426,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 28;
+const APP_VERSION = 29;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
