@@ -1,6 +1,6 @@
 {
-  "name": "Urlaubspackliste",
-  "short_name": "Packliste",
+  "name": "Reisen",
+  "short_name": "Reisen",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

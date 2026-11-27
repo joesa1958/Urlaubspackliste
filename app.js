@@ -27,6 +27,12 @@ const fmtTime = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit'
 
 /* ---------- Icons ---------- */
 const I = {
+  mappin: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  ticket: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8V6.5h17V8a2 2 0 0 0 0 4v0a2 2 0 0 0 0 4v1.5h-17V16a2 2 0 0 0 0-4 2 2 0 0 0 0-4zM14.5 6.5v11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  note: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h9l3.5 3.5v13.5H6zM9 10h6.5M9 13.5h6.5M9 17h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  route: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 17h7.5a3 3 0 0 0 0-6h-7a3 3 0 0 1 0-6H16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  link: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  phone: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   money: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="6" width="19" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14.9 9.6A3.3 3.3 0 1 0 14.9 14.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.4 11.3h4.4M8.4 12.9h4.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
   cal: '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 10h17M8 3v4M16 3v4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   advent: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="9.1" y="8.4" width="2.4" height="8" rx=".6" fill="currentColor" opacity=".7"/><rect x="12.5" y="8.4" width="2.4" height="8" rx=".6" fill="currentColor" opacity=".7"/><path d="M10.3 7.4c-1.2-1.1-1.1-2.6 0-3.9 1.1 1.3 1.2 2.8 0 3.9zM13.7 7.4c-1.2-1.1-1.1-2.6 0-3.9 1.1 1.3 1.2 2.8 0 3.9z" fill="currentColor" opacity=".7"/><path d="M2.5 18.5c0-1.8 4.3-3.2 9.5-3.2s9.5 1.4 9.5 3.2-4.3 3.2-9.5 3.2-9.5-1.4-9.5-3.2z" fill="none" stroke="currentColor" stroke-width="2.8"/><rect x="5" y="10.2" width="2.8" height="8.6" rx=".7" fill="currentColor"/><rect x="16.2" y="10.2" width="2.8" height="8.6" rx=".7" fill="currentColor"/><path d="M6.4 9.2c-1.2-1.1-1.1-2.6 0-3.9 1.1 1.3 1.2 2.8 0 3.9zM17.6 9.2c-1.2-1.1-1.1-2.6 0-3.9 1.1 1.3 1.2 2.8 0 3.9z" fill="currentColor"/></svg>',
@@ -244,6 +250,7 @@ function applyOp(doc, op) {
     }
     case 'addGroup': if (!grp(op.g.id)) doc.groups.push({ id: op.g.id, name: op.g.name, lists: [] }); return;
     case 'renameGroup': { const g = grp(op.g); if (g) g.name = op.name; return; }
+    case 'groupTrip': { const g = grp(op.g); if (g) g.trip = !!op.val; return; }
     case 'delGroup': {
       const i = doc.groups.findIndex(g => g.id === op.g); if (i < 0 || doc.groups.length < 2) return;
       const [g] = doc.groups.splice(i, 1); doc.groups[Math.max(0, i - 1)].lists.push(...g.lists); return;
@@ -281,6 +288,7 @@ function applyOp(doc, op) {
     case 'lastDone': L.lastDone = op.date; break;
     case 'renameList': L.name = op.name; break;
     case 'setDate': if (op.date) L.date = op.date; else delete L.date; break;
+    case 'setTrip': { const t = Object.assign({}, L.trip || {}, op.patch); Object.keys(t).forEach(k => { if (t[k] === '' || t[k] == null) delete t[k]; }); if (Object.keys(t).length) L.trip = t; else delete L.trip; break; }
     case 'setIcon': L.icon = op.icon; break;
     case 'setColor': L.color = op.color; break;
     case 'seedIcons': {
@@ -543,6 +551,63 @@ function dateBadge(iso) {
   return `<span class="ldbadge ${days < 0 ? 'past' : days <= 7 ? 'soon' : ''}"><span class="ldd">${WTAGE[dt.getDay()]} ${d}. ${MONTHS[mo - 1]}</span><span class="ldr">${rel}</span></span>`;
 }
 
+/* Reisen: Listen in einer Reise-Gruppe öffnen die Reise-Seite (Ort, Buchung, Termine, Notizen, Packliste) */
+const isTripGroup = g => g.trip === true || (g.trip === undefined && /urlaub|reise/i.test(g.name || ''));
+const groupOf = id => view.groups.find(g => g.lists.includes(id));
+const isTrip = id => { const g = groupOf(id); return !!(g && isTripGroup(g)); };
+const dParts = iso => iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').map(Number) : null;
+function rangeText(from, to) {
+  const a = dParts(from), b = dParts(to); if (!a) return '';
+  if (!b) return `ab ${a[2]}. ${MONTHS[a[1] - 1]}`;
+  return a[1] === b[1] && a[0] === b[0] ? `${a[2]}.–${b[2]}. ${MONTHS[b[1] - 1]}` : `${a[2]}. ${MONTHS[a[1] - 1]} – ${b[2]}. ${MONTHS[b[1] - 1]}`;
+}
+function tripRel(from, to) {
+  const a = dParts(from); if (!a) return '';
+  const now = new Date(), t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d1 = Math.round((new Date(a[0], a[1] - 1, a[2]) - t0) / 864e5), b = dParts(to);
+  const d2 = b ? Math.round((new Date(b[0], b[1] - 1, b[2]) - t0) / 864e5) : d1;
+  if (d1 > 1) return `in ${d1} Tagen`; if (d1 === 1) return 'morgen'; if (d2 >= 0) return 'läuft'; return 'vorbei';
+}
+async function geocode(id, place) {
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=de&q=' + encodeURIComponent(place));
+    const j = await r.json(); const L = view.lists[id];
+    if (j && j[0] && L && L.trip && L.trip.place === place) commit({ t: 'setTrip', l: id, patch: { lat: +(+j[0].lat).toFixed(5), lon: +(+j[0].lon).toFixed(5) } });
+    else if (!j || !j[0]) toast('Ort nicht auf der Karte gefunden – die Route funktioniert trotzdem');
+  } catch (e) { /* ohne Netz: nur ohne Karte */ }
+}
+let tripEdit = null;
+function vTrip(id) {
+  const m = meta(id), L = view.lists[id], T = L.trip || {}, ed = tripEdit === id;
+  const st = runState(id), items = allItems(L), rel = tripRel(L.date, T.to);
+  const dues = items.filter(it => it.due).sort((a, b) => a.due < b.due ? -1 : 1);
+  const card = (icon, title, body) => `<section class="tcard"><div class="tch">${I[icon] || ''}<span>${title}</span></div>${body}</section>`;
+  const inp = (f, label, type = 'text', ph = '') => `<label class="tfield"><span>${label}</span><input type="${type}" data-trip="${f}" value="${esc(T[f] || '')}" placeholder="${ph}" autocomplete="off"></label>`;
+  const apple = T.place ? `https://maps.apple.com/?daddr=${encodeURIComponent(T.place)}${T.lat ? `&ll=${T.lat},${T.lon}` : ''}` : '';
+  const map = T.lat ? `<a class="tmap" href="${apple}" target="_blank" rel="noopener" aria-label="Ort in Apple Karten öffnen"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=${T.lon - 0.04},${T.lat - 0.018},${T.lon + 0.04},${T.lat + 0.018}&layer=mapnik&marker=${T.lat},${T.lon}" loading="lazy" tabindex="-1" title="Karte"></iframe></a>` : '';
+  const packed = st.total ? `${st.doneCount} von ${st.total} erledigt` : items.length ? 'noch nichts ausgewählt' : 'noch leer';
+  const parts = [];
+  if (ed) parts.push(card('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>Abreise</span><input type="date" data-tripdate="from" value="${esc(L.date || '')}"></label><label class="tfield"><span>Rückkehr</span><input type="date" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
+  if (ed || T.place) parts.push(card('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Campingplatz, Ort') : `${map}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.route || ''}Route in Apple Karten</a>`));
+  if (ed || T.url || T.booking || T.phone) parts.push(card('ticket', 'Buchung', ed
+    ? inp('url', 'Buchungsseite (Adresse)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('phone', 'Telefon', 'tel')
+    : `${T.url ? `<a class="tlink" href="${esc(/^https?:/i.test(T.url) ? T.url : 'https://' + T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
+       ${T.booking ? `<div class="tline">Buchungsnummer <b>${esc(T.booking)}</b></div>` : ''}
+       ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}`));
+  if (dues.length) parts.push(card('cal', 'Termine', dues.map(it => `<div class="tdue"><div><div class="tline">${esc(it.text)}</div>${dueBadge(it.due)}</div>${calLink(it, m.name)}</div>`).join('')));
+  else if (ed) parts.push(card('cal', 'Termine', `<p class="hint" style="margin:0">Termine setzt du an einzelnen Punkten der Packliste (Bearbeiten › Kopier-Symbol mit „T“). Sie erscheinen dann hier.</p>`));
+  parts.push(`<a class="tcard tpack" href="#/liste/${id}" data-act="openList" data-l="${id}"><div class="tch">${I.suitcase}<span>Packliste</span></div>
+    <div class="tpackrow"><span>${packed}</span>${I.chev}</div>${st.total ? `<div class="tprog"><div style="width:${Math.round(st.doneCount / st.total * 100)}%"></div></div>` : ''}</a>`);
+  if (ed || T.notes) parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>` : `<div class="tnotesview">${esc(T.notes)}</div>`));
+  if (!ed && !T.place && !T.url && !T.booking && !T.phone && !T.notes) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
+  return `<div class="screen">
+    <header class="top">${topBar('#/', 'Reisen', refreshBtn() + (ed ? `<button class="textbtn strong" data-act="tripEdit">Fertig</button>` : `<button class="iconbtn" data-act="tripEdit" aria-label="Reise bearbeiten">${I.edit}</button>`))}
+      <div class="ttitle">${listIcon(m.icon, m.color)}<div><h1>${esc(m.name)}</h1>${L.date ? `<div class="sub">${rangeText(L.date, T.to)}${rel ? ` · <b>${rel}</b>` : ''}</div>` : ''}</div></div></header>
+    <main class="content">${parts.join('')}</main>
+    <a class="foot" href="#/einstellungen" data-status></a>
+  </div>`;
+}
+
 /* Seite 1: Übersicht */
 function vHome() {
   const groups = view.groups.map(gr => {
@@ -553,7 +618,9 @@ function vHome() {
       let stat = !items.length ? 'noch leer' : st.total ? `${st.total} Punkt${st.total === 1 ? '' : 'e'}` : 'noch nichts ausgewählt';
       if (st.started && st.rest.length) stat = `${st.doneCount} von ${st.total} eingepackt`;
       else if (L.lastDone && items.length) stat = `zuletzt gepackt: ${fmtDate(L.lastDone)}`;
-      return `<a class="row" href="#/liste/${l.id}" data-act="openList" data-l="${l.id}">
+      const trip = isTripGroup(gr);
+      if (trip && L.date && L.trip && L.trip.to) stat = `${rangeText(L.date, L.trip.to)} · ${stat}`;
+      return `<a class="row" href="#/${trip ? 'reise' : 'liste'}/${l.id}" ${trip ? '' : `data-act="openList" data-l="${l.id}"`}>
         ${listIcon(l.icon, l.color)}
         <span class="listtext"><span class="listname">${esc(l.name)}</span><span class="liststat">${esc(stat)}</span></span>${dateBadge(L.date)}${I.chev}</a>`;
     }).join('');
@@ -562,7 +629,7 @@ function vHome() {
   return `<div class="screen">
     <header class="hero"><img src="hero.jpg" alt=""><div class="inner">
       <div class="bar"><span class="name">${I.suitcase}Unser Urlaub</span><div class="icons">${refreshBtn()}<a class="iconbtn" href="#/listen" aria-label="Listen bearbeiten">${I.edit}</a></div></div>
-      <h1>Packlisten</h1></div></header>
+      <h1>Reisen</h1></div></header>
     <main class="content">${groups}</main>
     <a class="foot" href="#/einstellungen" data-status></a>
   </div>`;
@@ -587,7 +654,7 @@ function secListHtml(st, secNames, secOf, showDone) {
 function vRun(id) {
   const m = meta(id), items = allItems(view.lists[id]);
   const st = runState(id);
-  const head = (left) => `<div class="bar"><a class="back" href="#/">${I.back}Listen</a><div class="icons">${left}${refreshBtn()}${listIcons(id)}</div></div>`;
+  const head = (left) => `<div class="bar"><a class="back" href="${isTrip(id) ? '#/reise/' + id : '#/'}">${I.back}${isTrip(id) ? 'Reise' : 'Listen'}</a><div class="icons">${left}${refreshBtn()}${listIcons(id)}</div></div>`;
   if (!items.length || !st.total) {
     return `<div class="screen"><div class="run">${head('')}
       <div class="finished"><h2>${esc(m.name)}</h2>
@@ -818,6 +885,7 @@ function vLists() {
       <span class="icons">
         <button class="iconbtn small" data-act="groupUp" data-g="${g.id}" aria-label="Gruppe nach oben" ${gi ? '' : 'disabled'}>${I.up}</button>
         <button class="iconbtn small" data-act="groupDown" data-g="${g.id}" aria-label="Gruppe nach unten" ${gi < view.groups.length - 1 ? '' : 'disabled'}>${I.down}</button>
+        <button class="kindbtn ${isTripGroup(g) ? 'task' : ''}" data-act="groupTrip" data-g="${g.id}" aria-label="Reise-Gruppe ${isTripGroup(g) ? 'an' : 'aus'} – antippen zum Wechseln">${isTripGroup(g) ? '✓ ' : ''}Reisen</button>
         ${view.groups.length > 1 ? `<button class="smallbtn" data-act="delGroup" data-g="${g.id}">Löschen</button>` : ''}
       </span>
     </div>
@@ -865,7 +933,7 @@ function vLogin() {
   const code = isStandalone() || (lsGet('verifier', null) && !lsGet('withRedirect', false));
   return `<div class="screen"><div class="run" style="justify-content:center;text-align:center;align-items:center;gap:16px">
     <img src="apple-touch-icon.png" alt="" style="width:96px;height:96px;border-radius:22px">
-    <h2 style="margin:0;font-size:26px">Urlaubspackliste</h2>
+    <h2 style="margin:0;font-size:26px">Reisen</h2>
     <p class="sub" style="max-width:320px">Die Listen liegen in eurer Dropbox. Ohne Verbindung wird nichts angezeigt.</p>
     <a class="primary" data-act="login" href="${esc(loginHref(!isStandalone()))}" ${isStandalone() ? 'target="_blank" rel="noopener"' : ''} style="max-width:340px;display:flex;align-items:center;justify-content:center;text-decoration:none">Verbindung zur Dropbox herstellen</a>
     ${code ? `<form class="field" data-act="code" style="width:100%;max-width:340px;border:0;padding:0"><label for="code">Nach der Anmeldung zeigt Dropbox einen Code. Kopieren und hier einfügen:</label>
@@ -909,6 +977,7 @@ function route() {
   const h = location.hash.replace(/^#\/?/, '').split('/');
   if (h[0] === 'listen') return { v: 'lists' };
   if (h[0] === 'liste' && meta(h[1])) return { v: h[2] === 'auswahl' ? 'select' : h[2] === 'bearbeiten' ? 'edit' : 'run', id: h[1] };
+  if (h[0] === 'reise' && meta(h[1])) return { v: 'trip', id: h[1] };
   if (h[0] === 'einstellungen') return { v: 'settings' };
   return { v: 'home' };
 }
@@ -936,7 +1005,7 @@ function applyTheme(r) {
 function render() {
   const r = route(); const key = r.v + (r.id || '');
   const sy = key === lastRouteKey ? window.scrollY : 0;
-  const html = !connected() ? vLogin() : r.v === 'select' ? vSelect(r.id) : r.v === 'run' ? vRun(r.id) : r.v === 'edit' ? vEdit(r.id) : r.v === 'settings' ? vSettings() : r.v === 'lists' ? vLists() : vHome();
+  const html = !connected() ? vLogin() : r.v === 'select' ? vSelect(r.id) : r.v === 'run' ? vRun(r.id) : r.v === 'edit' ? vEdit(r.id) : r.v === 'settings' ? vSettings() : r.v === 'trip' ? vTrip(r.id) : r.v === 'lists' ? vLists() : vHome();
   applyTheme(r);
   $('#app').innerHTML = html;
   renderStatus();
@@ -1073,6 +1142,8 @@ document.addEventListener('click', e => {
       document.body.appendChild(ov); break;
     }
     case 'calAdd': case 'calShare': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) calAdd(f.item, meta(r.id).name, act === 'calShare'); break; }
+    case 'tripEdit': tripEdit = tripEdit === id ? null : id; render(); break;
+    case 'groupTrip': { const g = view.groups.find(x => x.id === el.dataset.g); if (g) { const on = !isTripGroup(g); commit({ t: 'groupTrip', g: g.id, val: on }); toast(on ? `„${g.name}“: Einträge öffnen jetzt die Reise-Seite` : `„${g.name}“: Einträge öffnen direkt die Liste`); } break; }
     case 'secKind': { const x = view.lists[id].sections.find(y => y.id === el.dataset.s); if (x) { commit({ t: 'secKind', l: id, s: x.id, task: !x.task }); toast(`„${x.title || 'Abschnitt'}“: Knopf heißt jetzt „${x.task ? 'Eingepackt' : 'Erledigt'}“`); } break; }
     case 'clearDue': { const f = findItem(view.lists[id], el.dataset.i); if (f) commit({ t: 'editItem', l: id, i: f.item.id, patch: { due: '' } }); break; }
     case 'reserveToggle': reserveOpen = !reserveOpen; render(); break;
@@ -1158,6 +1229,17 @@ document.addEventListener('submit', async e => {
   }
 });
 document.addEventListener('change', async e => {
+  if (e.target.matches('[data-trip], [data-tripdate]')) {
+    const r = route(); if (!view.lists[r.id]) return;
+    const v = (e.target.value || '').trim();
+    if (e.target.dataset.tripdate) { if (v !== (view.lists[r.id].date || '')) commit({ t: 'setDate', l: r.id, date: v }); return; }
+    const f = e.target.dataset.trip, T = view.lists[r.id].trip || {};
+    if (v === (T[f] || '')) return;
+    const patch = { [f]: v }; if (f === 'place') { patch.lat = ''; patch.lon = ''; }
+    commit({ t: 'setTrip', l: r.id, patch });
+    if (f === 'place' && v) geocode(r.id, v);
+    return;
+  }
   if (e.target.matches('input[data-due]')) {
     const r = route(), f = findItem(view.lists[r.id], e.target.dataset.due), v = e.target.value || '';
     if (f && v !== (f.item.due || '')) commit({ t: 'editItem', l: r.id, i: f.item.id, patch: { due: v } });
@@ -1225,7 +1307,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 26;
+const APP_VERSION = 27;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
@@ -1247,7 +1329,7 @@ async function boot() {
   render();
   sync(); checkUpdate();
 }
-window.addEventListener('hashchange', () => { moveSel = null; render(); });
+window.addEventListener('hashchange', () => { tripEdit = null; moveSel = null; render(); });
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { sync(); checkUpdate(); } });
 window.addEventListener('online', () => sync());
 boot();
