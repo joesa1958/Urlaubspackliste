@@ -671,13 +671,13 @@ function vTrip(id) {
   const dues = items.filter(it => it.due).sort((a, b) => a.due < b.due ? -1 : 1);
   const card = (icon, title, body) => `<section class="tcard"><div class="tch">${I[icon] || ''}<span>${title}</span></div>${body}</section>`;
   const inp = (f, label, type = 'text', ph = '') => `<label class="tfield"><span>${label}</span><input type="${type}" data-trip="${f}" value="${esc(T[f] || '')}" placeholder="${ph}" autocomplete="off"></label>`;
-  const apple = T.place ? `https://maps.apple.com/?daddr=${encodeURIComponent(T.place)}${T.lat ? `&ll=${T.lat},${T.lon}` : ''}` : '';
+  const apple = T.place ? `https://maps.apple.com/?address=${encodeURIComponent(T.place)}&q=${encodeURIComponent(T.place)}${T.lat ? `&ll=${T.lat},${T.lon}` : ''}` : '';
   const map = T.lat ? `<a class="tmap" href="${apple}" target="_blank" rel="noopener" aria-label="Ort in Apple Karten öffnen"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=${T.lon - 0.04},${T.lat - 0.018},${T.lon + 0.04},${T.lat + 0.018}&layer=mapnik&marker=${T.lat},${T.lon}" loading="lazy" tabindex="-1" title="Karte"></iframe></a>` : '';
   const packed = st.total ? `${st.doneCount} von ${st.total} erledigt` : items.length ? 'noch nichts ausgewählt' : 'noch leer';
   const parts = [];
   if (ed) parts.push(card('camera', 'Titelbild', `<label class="tlink filebtn"><input type="file" accept="image/*" data-photo="${id}">${I.camera || ''}${T.photo ? 'Anderes Foto wählen' : 'Foto wählen'}</label>${T.photo ? `<button class="textbtn" data-act="photoDel">Foto entfernen</button>` : ''}`));
   if (ed) parts.push(card('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>Abreise</span><input type="date" data-tripdate="from" value="${esc(L.date || '')}"></label><label class="tfield"><span>Rückkehr</span><input type="date" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
-  if (ed || T.place) parts.push(card('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.route || ''}Route in Apple Karten</a>`));
+  if (ed || T.place) parts.push(card('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.mappin || ''}In Apple Karten</a>`));
   if (ed || T.url || T.accom || T.guest || T.booking || T.price || T.phone || T.email) parts.push(card('ticket', 'Buchung', ed
     ? inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
     : `${T.accom ? `<a class="tlink" href="${esc(/^https?:/i.test(T.accom) ? T.accom : 'https://' + T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
@@ -1431,7 +1431,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 32;
+const APP_VERSION = 33;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
