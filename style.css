@@ -255,3 +255,7 @@ li.placeholder { background: var(--sel); border-top: 1px solid var(--line2); }
 .emorow { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--muted); }
 .emoinput { width: 64px; min-height: 44px; font-size: 26px; text-align: center; border: 1.5px dashed var(--line); border-radius: 12px; background: var(--card); }
 .wheelwrap { touch-action: none; user-select: none; -webkit-user-select: none; }
+
+/* Abschnittstitel über der Walze, nicht Teil davon */
+.secwrap { display: flex; justify-content: center; margin: 22px 0 4px; }
+.secpill.sechead { font-size: 19px; font-weight: 700; padding: 10px 22px; border-radius: 22px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
