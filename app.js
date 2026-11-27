@@ -681,17 +681,17 @@ function icsHref(it, listName) {
     'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${e(it.text)}`, 'TRIGGER:-PT15H', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
   return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
 }
-const calLink = (it, listName) => it.due ? `<button class="callink" data-act="calAdd" data-i="${it.id}">${I.cal || ''}In den Kalender</button>` : '';
-async function calAdd(it, listName) {
+const calLink = (it, listName) => it.due ? `<span class="calrow"><button class="callink" data-act="calAdd" data-i="${it.id}">${I.cal || ''}In den Kalender</button><button class="textbtn calshare" data-act="calShare" data-i="${it.id}">als Datei teilen</button></span>` : '';
+async function calAdd(it, listName, share) {
   const ics = decodeURIComponent(icsHref(it, listName).split(',')[1]);
   const name = (it.text.replace(/[^\wÄÖÜäöüß -]+/g, '').trim() || 'Termin') + '.ics';
   const file = new File([ics], name, { type: 'text/calendar' });
   // 1. Wahl: Teilen-Menü des iPhones (dort „Kalender“ bzw. Datei öffnen); sonst Datei direkt öffnen
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (share && navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], title: it.text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
   }
-  const url = URL.createObjectURL(file);
-  location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const url = URL.createObjectURL(file); // Safari öffnet .ics direkt als Kalendereintrag
+  const a = document.createElement('a'); a.href = url; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 /* Seite 3: Auswahl */
@@ -1061,7 +1061,7 @@ document.addEventListener('click', e => {
       itemMenu = null; commit({ t: 'moveItem', l: id, i: f.item.id, s: target.id });
       toast(`„${f.item.text}“ nach „${target.title || 'Ohne Namen'}“ verschoben`); break;
     }
-    case 'calAdd': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) calAdd(f.item, meta(r.id).name); break; }
+    case 'calAdd': case 'calShare': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) calAdd(f.item, meta(r.id).name, act === 'calShare'); break; }
     case 'clearDue': { const f = findItem(view.lists[id], el.dataset.i); if (f) commit({ t: 'editItem', l: id, i: f.item.id, patch: { due: '' } }); break; }
     case 'reserveToggle': reserveOpen = !reserveOpen; render(); break;
     case 'unselItem': { const f = findItem(view.lists[id], el.dataset.i); if (f) { commit({ t: 'editItem', l: id, i: f.item.id, patch: { sel: false } }); toast(`„${f.item.text}“ herausgenommen – unten wieder hinzufügbar`); } break; }
@@ -1213,7 +1213,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 20;
+const APP_VERSION = 21;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
