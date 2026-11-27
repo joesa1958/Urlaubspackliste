@@ -677,22 +677,25 @@ function sameVal(k, a, b) {
   return n(a) === n(b);
 }
 async function fillFromPdf(id, sid, file) {
-  try {
+  try { return await fillFromText(id, sid, await pdfText(file), file.name); } catch (e) { return -1; /* PDF ohne lesbaren Text: nur als Dokument gespeichert */ }
+}
+async function fillFromText(id, sid, text, source) {
+  {
     const S = stationsOf(id), multi = S.length > 1, T = S.find(y => y.id === sid) || {};
-    const x = parseNotes(await pdfText(file), T.name || meta(id).name), patch = {}, got = [], diff = [];
-    const names = { place: 'Ort', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', room: 'Zimmer', booking: 'Buchungsnummer', price: 'Gesamtpreis', phone: 'Telefon', email: 'E-Mail', accom: 'Unterkunft', url: 'Buchungsseite' };
+    const x = parseNotes(text, T.name || meta(id).name), patch = {}, got = [], diff = [];
+    const names = { place: 'Ort', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', room: 'Zimmer', contact: 'Kontaktperson', booking: 'Buchungsnummer', price: 'Gesamtpreis', phone: 'Telefon', email: 'E-Mail', accom: 'Unterkunft', url: 'Buchungsseite' };
     Object.keys(names).forEach(k => { if (!x[k]) return; if (!T[k]) { patch[k] = x[k]; got.push(names[k]); } else if (!sameVal(k, T[k], x[k])) diff.push({ k, label: names[k], old: T[k], neu: x[k] }); });
     if (multi && x.hotel && (!T.name || T.name === 'Neue Station')) { const city = (x.place || '').match(/\d{5}\s+([^,]+)$/); patch.name = city ? city[1].trim() : x.hotel; got.unshift('Name'); }
-    if (got.length) { commit({ t: 'setStation', l: id, s: sid, patch }); if (patch.place) geocode(id, sid, patch.place, true); toast('Aus dem PDF übernommen: ' + got.join(', ')); }
-    if (diff.length) askDiffs(id, sid, file.name, diff);
+    if (got.length) { commit({ t: 'setStation', l: id, s: sid, patch }); if (patch.place) geocode(id, sid, patch.place, true); toast(`Aus ${source === 'Notizen' ? 'den Notizen' : 'dem PDF'} übernommen: ` + got.join(', ')); }
+    if (diff.length) askDiffs(id, sid, source, diff);
     return got.length + diff.length;
-  } catch (e) { return -1; /* PDF ohne lesbaren Text: nur als Dokument gespeichert */ }
+  }
 }
 function askDiffs(id, sid, fname, diff) {
   const show = (k, v) => k === 'from' || k === 'to' ? fmtDE(v) : v;
   const ov = document.createElement('div'); ov.className = 'notesheet';
   ov.innerHTML = `<div class="notecard" role="dialog" aria-modal="true"><div class="notehead"><b>Abweichungen gefunden</b></div>
-    <div class="notebody" style="font-size:15px"><p style="margin:0 0 10px;color:var(--muted)">In „${esc(fname)}“ stehen andere Angaben als eingetragen. Was soll übernommen werden?</p>
+    <div class="notebody" style="font-size:15px"><p style="margin:0 0 10px;color:var(--muted)">${fname === 'Notizen' ? 'In den Notizen' : `In „${esc(fname)}“`} stehen andere Angaben als eingetragen. Was soll übernommen werden?</p>
     ${diff.map((d, n) => `<label class="diffrow"><input type="checkbox" data-n="${n}"><span><b>${esc(d.label)}</b><br><s>${esc(show(d.k, d.old))}</s> → <b>${esc(show(d.k, d.neu))}</b></span></label>`).join('')}</div>
     <div class="diffbtns"><button class="secondary" data-keep>Beibehalten</button><button class="primary" data-take>Übernehmen</button></div></div>`;
   ov.addEventListener('click', ev => {
@@ -705,7 +708,7 @@ function askDiffs(id, sid, fname, diff) {
     commit({ t: 'setStation', l: id, s: sid, patch });
     if (patch.place) geocode(id, sid, patch.place, true);
     const now = new Date(), st = (stationsOf(id).find(y => y.id === sid) || {}).name, multi = stationsOf(id).length > 1;
-    const line = `${now.getDate()}.${now.getMonth() + 1}.: ${multi && st ? st + ' – ' : ''}${pick.map(d => `${d.label} von ${show(d.k, d.old)} auf ${show(d.k, d.neu)}`).join(', ')} geändert (aus ${fname})`;
+    const line = `${now.getDate()}.${now.getMonth() + 1}.: ${multi && st ? st + ' – ' : ''}${pick.map(d => `${d.label} von ${show(d.k, d.old)} auf ${show(d.k, d.neu)}`).join(', ')} geändert (aus ${fname === 'Notizen' ? 'den Notizen' : fname})`;
     const notes = ((view.lists[id] || {}).trip || {}).notes || '';
     commit({ t: 'setTrip', l: id, patch: { notes: notes ? notes.replace(/\s+$/, '') + '\n' + line : line } });
     toast(`${pick.length} Angabe${pick.length === 1 ? '' : 'n'} geändert – in den Notizen vermerkt`);
@@ -738,6 +741,8 @@ function parseNotes(txt, tripName) {
   if (an && dOf(an[1])) out.from = dOf(an[1]); if (ab && dOf(ab[1])) out.to = dOf(ab[1]);
   const adr = [...t.matchAll(/([A-ZÄÖÜ][\wäöüß.\- ]*?(?:straße|strasse|str\.|weg|platz|damm|allee|gasse|ring|ufer)\s*[\d][\w\-–]*)\s*,?\s*(\d{5}\s+[A-ZÄÖÜ][\wäöüß\- ]+)/gi)].map(m => `${m[1].trim()}, ${m[2].trim()}`);
   if (adr.length) out.place = adr.find(a => tripName && a.toLowerCase().includes(tripName.toLowerCase())) || adr.find(a => !/postanschrift/i.test(a)) || adr[0];
+  const ct = t.match(/(?:Ansprechpartner(?:in)?|Kontaktperson|Ihr(?:e)? Gastgeber(?:in)?|Gastgeber(?:in)?|Vermieter(?:in)?)[^\S\n]*:?[^\S\n]*([A-ZÄÖÜ][^\n,;]{2,50})/);
+  if (ct) out.contact = ct[1].trim();
   const room = t.match(/(?:Zimmerkategorie|Zimmertyp|Zimmerart|Kategorie|Apartment|Wohnung)[^\S\n]*:[^\S\n]*([^\n]{3,70})/i) || t.match(/(?:Objekt|Unterkunft)\s*\[([^\]]{3,60})\]/i);
   if (room) out.room = room[1].trim();
   const hotel = t.match(/(?:^|\n)[^\S\n]*(?:Hotel|Unterkunft)[^\S\n]*:[^\S\n]*([^\n]{3,60})/i); if (hotel) out.hotel = hotel[1].trim().replace(/^\[|\]$/g, '');
@@ -745,7 +750,7 @@ function parseNotes(txt, tripName) {
   return out;
 }
 let tripEdit = null; const geoTried = new Set();
-const ST_FIELDS = ['name', 'room', 'place', 'lat', 'lon', 'url', 'accom', 'guest', 'booking', 'price', 'phone', 'email', 'photo', 'docs', 'to'];
+const ST_FIELDS = ['name', 'room', 'contact', 'place', 'lat', 'lon', 'url', 'accom', 'guest', 'booking', 'price', 'phone', 'email', 'photo', 'docs', 'to'];
 /* Stationen einer Reise (ältere Reisen ohne Stationsliste gelten als eine Station „s0“) */
 function stationsOf(id) {
   const L = view.lists[id] || {}, T = L.trip || {};
@@ -802,25 +807,27 @@ function vStation(id, sid) {
   const map = T.lat ? `<a class="tmap" href="${apple}" target="_blank" rel="noopener" aria-label="Ort in Apple Karten öffnen"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=${T.lon - 0.04},${T.lat - 0.018},${T.lon + 0.04},${T.lat + 0.018}&layer=mapnik&marker=${T.lat},${T.lon}" loading="lazy" tabindex="-1" title="Karte"></iframe></a>` : '';
   const link = u => esc(/^https?:/i.test(u) ? u : 'https://' + u);
   const parts = [];
+  const fillBtn = `<button class="fillbtn" data-act="notesFill" data-st="${sid}">${I.note || ''} Aus Notizen übernehmen</button><p class="hint" style="margin:-4px 0 12px">${(L.trip || {}).notes ? `Füllt leere Felder aus den Notizen${multi ? ' der Reise' : ''}. Abweichungen werden nachgefragt.` : `Erst Text (z. B. aus der Buchungsmail) in die Notizen${multi ? ' der Reise' : ''} einfügen.`}</p>`;
+  if (ed) parts.push(`<div class="fillwrap">${fillBtn}</div>`);
   if (ed) parts.push(tcard('camera', 'Titelbild', `<label class="tlink filebtn"><input type="file" accept="image/*" data-photo="${id}" data-st="${sid}">${I.camera || ''}${T.photo ? 'Anderes Foto wählen' : 'Foto wählen'}</label>${T.photo ? `<button class="textbtn" data-act="photoDel" data-st="${sid}">Foto entfernen</button>` : ''}`));
   if (ed && multi) parts.push(tcard('mappin', 'Station', inp('name', 'Name der Station', 'text', 'z. B. Hamburg') + `<button class="kindbtn ${main && main.id === sid ? 'task' : ''}" data-act="mainStation" data-st="${sid}">★ Hauptstation${main && main.id === sid ? '' : ' machen'}</button>`));
   if (ed) parts.push(tcard('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>${multi ? 'Anreise' : 'Abreise'}</span><input type="date" data-st="${sid}" data-trip="from" value="${esc(T.from || '')}"></label><label class="tfield"><span>${multi ? 'Abreise' : 'Rückkehr'}</span><input type="date" data-st="${sid}" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
   if (ed || T.place) parts.push(tcard('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" data-st="${sid}" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.mappin || ''}In Apple Karten</a>`));
-  if (ed || T.url || T.accom || T.guest || T.booking || T.room || T.price || T.phone || T.email) parts.push(tcard('ticket', 'Buchung', ed
-    ? inp('room', 'Zimmer / Kategorie', 'text', 'z. B. Doppelzimmer mit Balkon') + inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
+  if (ed || T.url || T.accom || T.guest || T.booking || T.room || T.price || T.phone || T.email || T.contact) parts.push(tcard('ticket', 'Buchung', ed
+    ? inp('room', 'Zimmer / Kategorie', 'text', 'z. B. Doppelzimmer mit Balkon') + inp('contact', 'Kontaktperson', 'text', 'Name') + inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
     : `${T.accom ? `<a class="tlink" href="${link(T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
        ${T.url ? `<a class="tlink" href="${link(T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
        ${T.guest ? `<a class="tlink" href="${link(T.guest)}" target="_blank" rel="noopener">${I.link || ''}Gäste-App öffnen</a>` : ''}
        ${T.room ? `<div class="tline">Zimmer <b>${esc(T.room)}</b></div>` : ''}
        ${T.booking ? `<div class="tline">Buchungsnummer <b>${esc(T.booking)}</b></div>` : ''}
        ${T.price ? `<div class="tline">Gesamtpreis <b>${esc(T.price)}</b></div>` : ''}
+       ${T.contact ? `<div class="tline">Kontaktperson <b>${esc(T.contact)}</b></div>` : ''}
        ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}
        ${T.email ? `<a class="tlink" href="mailto:${esc(T.email)}">${I.mail || ''}${esc(T.email)}</a>` : ''}`));
   const docs = T.docs || [];
   parts.push(tcard('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-st="${sid}" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed && /\.pdf$/i.test(d.name) ? `<button class="textbtn" data-act="docFill" data-st="${sid}" data-k="${k}">Daten übernehmen</button>` : ''}${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-st="${sid}" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
     + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}" data-st="${sid}">${I.plus || '+'} Dokument hinzufügen</label>`));
   if (!multi) parts.push(...tripCommon(id, m));
-  if (ed && (L.trip || {}).notes) parts.push(`<button class="tlink" data-act="notesFill" data-st="${sid}" style="border:0;background:none;padding:0 4px">↑ Leere Felder aus den Notizen ${multi ? 'der Reise ' : ''}füllen</button>`);
   if (ed && multi) parts.push(stDelBtn(sid));
   if (!multi) parts.push(`<button class="tlink tadd" data-act="addStation" style="border:0;background:none;padding:4px">${I.plus || '+'} Weitere Station hinzufügen (z. B. Zwischenstopp)</button>`);
   if (T.place && !T.lat && !geoTried.has(id + sid) && connected()) { geoTried.add(id + sid); setTimeout(() => geocode(id, sid, T.place, true), 0); }
@@ -1390,13 +1397,9 @@ document.addEventListener('click', e => {
       location.hash = `#/reise/${id}`; break;
     }
     case 'notesFill': {
-      const L = view.lists[id], sid = el.dataset.st, S = stationsOf(id), T = S.find(y => y.id === sid) || {}, multi = S.length > 1;
-      const x = parseNotes((L.trip || {}).notes || '', T.name || meta(id).name), patch = {}, got = [];
-      const names = { email: 'E-Mail', url: 'Buchungsseite', accom: 'Unterkunft', phone: 'Telefon', room: 'Zimmer', booking: 'Buchungsnummer', price: 'Gesamtpreis', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', place: 'Ort' };
-      Object.keys(names).forEach(k => { if (x[k] && !T[k]) { patch[k] = x[k]; got.push(names[k]); } });
-      if (Object.keys(patch).length) commit({ t: 'setStation', l: id, s: sid, patch });
-      if (patch.place) geocode(id, sid, patch.place, true);
-      toast(got.length ? 'Übernommen: ' + got.join(', ') : 'Nichts Neues gefunden – ausgefüllte Felder bleiben unverändert');
+      const L = view.lists[id], sid = el.dataset.st, notes = (L.trip || {}).notes || '';
+      if (!notes.trim()) { toast('Die Notizen sind noch leer'); break; }
+      fillFromText(id, sid, notes, 'Notizen').then(n => { if (!n) toast('Nichts Neues gefunden – ausgefüllte Felder bleiben unverändert'); });
       break;
     }
     case 'geoRetry': { const T = stationsOf(id).find(y => y.id === el.dataset.st) || {}; if (T.place) { toast('Suche den Ort …'); geocode(id, T.id, T.place); } break; }
@@ -1593,7 +1596,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 40;
+const APP_VERSION = 41;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });

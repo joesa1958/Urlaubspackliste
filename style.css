@@ -376,3 +376,6 @@ textarea.tnotesview:focus { background: var(--bg); border-radius: 8px; box-shado
 .diffrow s { color: var(--muted); }
 .diffbtns { display: flex; gap: 10px; margin-top: 14px; }
 .diffbtns button { flex: 1; min-height: 48px; }
+
+.fillbtn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; margin-bottom: 8px; border: 1.5px solid var(--accent); border-radius: 12px; background: var(--card); color: var(--accent); font: inherit; font-size: 16px; font-weight: 600; }
+.fillwrap { margin-bottom: 4px; }
