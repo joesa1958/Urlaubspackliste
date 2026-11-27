@@ -654,8 +654,8 @@ function vRun(id) {
     </div>
     <button class="done-btn" data-act="runDone" data-i="${cur.it.id}">${I.tick(22, '#fff', 2)} Eingepackt</button>
     <div class="runlinks">
-      <button class="later" data-act="runBack" ${st.rest.length > 1 ? '' : 'disabled style="opacity:.4"'}>${I.back} Zurück</button>
-      <button class="later" data-act="runLater" data-i="${cur.it.id}" ${st.rest.length > 1 ? '' : 'disabled style="opacity:.4"'}>Weiter ›</button>
+      <button class="later navhidden" aria-hidden="true" tabindex="-1" data-act="runBack" ${st.rest.length > 1 ? '' : 'disabled style="opacity:.4"'}>${I.back} Zurück</button>
+      <button class="later navhidden" aria-hidden="true" tabindex="-1" data-act="runLater" data-i="${cur.it.id}" ${st.rest.length > 1 ? '' : 'disabled style="opacity:.4"'}>Weiter ›</button>
       <button class="later" data-act="introOpen">Anfang</button></div>
   </div></div>`;
 }
@@ -1222,7 +1222,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 24;
+const APP_VERSION = 25;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
