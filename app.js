@@ -853,11 +853,11 @@ function vHome() {
         ${thumb ? `<span class="listicon thumb"><img src="${thumb}" alt=""></span>` : listIcon(l.icon, l.color)}
         <span class="listtext"><span class="listname">${esc(l.name)}</span><span class="liststat">${esc(stat)}</span></span>${dateBadge(L.date)}${I.chev}</a>`;
     }).join('');
-    return `<section class="group ${isArchive(gr) ? 'archive' : ''} ${/archiv/i.test(gr.name || '') ? 'named' : ''}"><div class="grouphead"><span class="grouptitle">${esc(g)}</span></div><div class="card">${rows || '<div class="empty">Keine Listen in dieser Gruppe</div>'}</div></section>`;
+    return `<section class="group ${isArchive(gr) ? 'archive' : ''} ${/archiv/i.test(gr.name || '') ? 'named' : ''}"><div class="grouphead"><span class="grouptitle">${esc(g)}</span></div><div class="card">${rows || '<div class="empty">Noch nichts in dieser Gruppe</div>'}</div></section>`;
   }).join('');
   return `<div class="screen">
     <header class="hero"><img src="hero.jpg" alt=""><div class="inner">
-      <div class="bar"><span class="name">${I.suitcase}Unser Urlaub</span><div class="icons">${refreshBtn()}<a class="iconbtn" href="#/listen" aria-label="Listen bearbeiten">${I.edit}</a></div></div>
+      <div class="bar"><span class="name">${I.suitcase}Unser Urlaub</span><div class="icons">${refreshBtn()}<a class="iconbtn" href="#/listen" aria-label="Übersicht bearbeiten">${I.edit}</a></div></div>
       <h1>Reisen</h1></div></header>
     <main class="content">${groups}</main>
     <a class="foot" href="#/einstellungen" data-status></a>
@@ -883,7 +883,7 @@ function secListHtml(st, secNames, secOf, showDone) {
 function vRun(id) {
   const m = meta(id), items = allItems(view.lists[id]);
   const st = runState(id);
-  const head = (left) => `<div class="bar"><a class="back" href="${isTrip(id) ? '#/reise/' + id : '#/'}">${I.back}${isTrip(id) ? 'Reise' : 'Listen'}</a><div class="icons">${left}${refreshBtn()}${listIcons(id)}</div></div>`;
+  const head = (left) => `<div class="bar"><a class="back" href="${isTrip(id) ? '#/reise/' + id : '#/'}">${I.back}${isTrip(id) ? 'Reise' : 'Übersicht'}</a><div class="icons">${left}${refreshBtn()}${listIcons(id)}</div></div>`;
   if (!items.length || !st.total) {
     return `<div class="screen"><div class="run">${head('')}
       <div class="finished"><h2>${esc(m.name)}</h2>
@@ -1071,8 +1071,8 @@ function vEdit(id) {
     </div></section>`).join('');
   return `<div class="screen">
     <header class="top">
-      ${id === TPL ? `<div class="bar"><a class="back" href="#/listen">${I.back}Listen</a><div class="icons">${refreshBtn()}<a class="textbtn strong" href="#/listen">Fertig</a></div></div>
-      <h1>Vorlage bearbeiten</h1><div class="sub">Neue Listen starten als Kopie davon.</div>`
+      ${id === TPL ? `<div class="bar"><a class="back" href="#/listen">${I.back}Zurück</a><div class="icons">${refreshBtn()}<a class="textbtn strong" href="#/listen">Fertig</a></div></div>
+      <h1>Vorlage bearbeiten</h1><div class="sub">Neue Packlisten starten als Kopie davon.</div>`
       : `<div class="bar"><a class="back" href="#/liste/${id}">${I.back}Packen</a><div class="icons">${refreshBtn()}<a class="iconbtn" href="#/liste/${id}/auswahl" aria-label="Auswahl">${I.select}</a><a class="textbtn strong" href="#/liste/${id}">Fertig</a></div></div>
       <h1>${esc(m.name)} bearbeiten</h1>`}
     </header>
@@ -1123,11 +1123,11 @@ function vLists() {
     </div>
     <div class="card"><ul class="items" data-s="${g.id}">
       ${g.lists.map(meta).filter(Boolean).map(l => `<li data-i="${l.id}"><div class="erow">
-        <button class="minus" data-act="delList" data-l="${l.id}" aria-label="Liste löschen"><span></span></button>
+        <button class="minus" data-act="delList" data-l="${l.id}" aria-label="„${esc(l.name)}“ löschen"><span></span></button>
         <button class="iconpick" data-act="pickIcon" data-l="${l.id}" aria-label="Symbol und Farbe ändern">${listIcon(l.icon, l.color)}</button>
         <div class="etext"><textarea rows="1" data-act="listName" data-l="${l.id}" aria-label="Liste umbenennen" enterkeyhint="done">${esc(l.name)}</textarea>
           ${listIsTrip(g, l.id) ? `<span class="ldate">${view.lists[l.id].date ? `${rangeText(view.lists[l.id].date, (view.lists[l.id].trip || {}).to)} · ` : ''}Daten auf der Reise-Seite</span>` : `<label class="ldate"><span>Abreise</span><input type="date" data-act="listDate" data-l="${l.id}" value="${esc(view.lists[l.id].date || '')}"></label>`}</div>
-        <button class="iconbtn small" data-act="dupList" data-l="${l.id}" aria-label="Liste „${esc(l.name)}“ duplizieren">${I.copy}</button>
+        <button class="iconbtn small" data-act="dupList" data-l="${l.id}" aria-label="„${esc(l.name)}“ duplizieren">${I.copy}</button>
         <span class="handle" data-drag="${l.id}" aria-hidden="true">${I.handle}</span>
       </div>
       ${iconPick === l.id ? `<div class="picker">
@@ -1141,20 +1141,20 @@ function vLists() {
       </li>`).join('')}
     </ul>
     <form class="addrow" data-act="addList" data-s="${g.id}"><span class="plus" aria-hidden="true">+</span>
-      <label class="sr" for="addl-${g.id}">Liste hinzufügen</label>
-      <input id="addl-${g.id}" placeholder="Liste hinzufügen" enterkeyhint="enter" autocomplete="off"></form>
+      <label class="sr" for="addl-${g.id}">${isTripGroup(g) ? 'Reise' : 'Liste'} hinzufügen</label>
+      <input id="addl-${g.id}" placeholder="${isTripGroup(g) ? 'Reise' : 'Liste'} hinzufügen" enterkeyhint="enter" autocomplete="off"></form>
     </div></section>`).join('');
   return `<div class="screen">
     <header class="top">
-      <div class="bar"><a class="back" href="#/">${I.back}Listen</a><div class="icons">${refreshBtn()}<a class="textbtn strong" href="#/">Fertig</a></div></div>
-      <h1>Listen bearbeiten</h1>
+      <div class="bar"><a class="back" href="#/">${I.back}Reisen</a><div class="icons">${refreshBtn()}<a class="textbtn strong" href="#/">Fertig</a></div></div>
+      <h1>Übersicht bearbeiten</h1>
     </header>
     <main class="content">${groups}
       <button class="dashed" data-act="addGroup">Gruppe hinzufügen</button>
-      ${view.lists[TPL] ? `<section class="group"><div class="grouphead"><span class="grouptitle">Vorlage für neue Listen</span></div>
+      ${view.lists[TPL] ? `<section class="group"><div class="grouphead"><span class="grouptitle">Vorlage für Packlisten</span></div>
         <div class="card"><a class="row" href="#/liste/${TPL}/bearbeiten">${listIcon('list', 'grau')}
           <span class="listtext"><span class="listname">Vorlage</span><span class="liststat">${allItems(view.lists[TPL]).length} Punkte · erscheint nicht in der Übersicht</span></span>${I.chev}</a></div>
-        <p class="hint">Jede neue Liste startet als Kopie der Vorlage, mit allen Punkten abgewählt. Danach wählt ihr aus, was mitkommt.</p></section>` : ''}
+        <p class="hint">Jede neue Reise oder Liste bekommt eine Packliste als Kopie der Vorlage, mit allen Punkten abgewählt. Danach wählt ihr aus, was mitkommt.</p></section>` : ''}
       <p class="hint">Namen direkt antippen und ändern. Symbol antippen, um Symbol und Farbe zu wählen. Das Kopier-Symbol dupliziert eine Liste mit allen Punkten. Listen am Griff rechts in eine andere Reihenfolge oder Gruppe ziehen. Gruppen mit den Pfeilen verschieben.</p>
     </main>
     <a class="foot" href="#/einstellungen" data-status></a>
@@ -1178,7 +1178,7 @@ function vSettings() {
   const pendingCode = lsGet('verifier', null) && !lsGet('withRedirect', false);
   const conn = connected();
   return `<div class="screen">
-    <header class="top">${topBar('#/', 'Listen', refreshBtn())}<h1>Einstellungen</h1></header>
+    <header class="top">${topBar('#/', 'Reisen', refreshBtn())}<h1>Einstellungen</h1></header>
     <main class="content">
       <section class="group"><div class="grouphead"><span class="grouptitle">Dropbox</span></div>
         <div class="card">
@@ -1336,7 +1336,7 @@ document.addEventListener('click', e => {
     }
     case 'delList': {
       const L = view.lists[el.dataset.l], n = allItems(L).length;
-      if (confirm(`Liste „${L.name}“${n ? ` mit ${n} Punkt${n === 1 ? '' : 'en'}` : ''} löschen? Das lässt sich nicht rückgängig machen.`)) { resetRun(el.dataset.l); commit({ t: 'delList', l: el.dataset.l }); }
+      if (confirm(`„${L.name}“${n ? ` mit ${n} Punkt${n === 1 ? '' : 'en'}` : ''} löschen? Das lässt sich nicht rückgängig machen.`)) { resetRun(el.dataset.l); commit({ t: 'delList', l: el.dataset.l }); }
       break;
     }
     case 'addGroup': {
@@ -1345,7 +1345,7 @@ document.addEventListener('click', e => {
     }
     case 'delGroup': {
       const g = view.groups.find(x => x.id === el.dataset.g);
-      if (confirm(g.lists.length ? `Gruppe „${g.name}“ löschen? Ihre ${g.lists.length} Listen wandern in die Gruppe darüber.` : `Gruppe „${g.name}“ löschen?`)) commit({ t: 'delGroup', g: g.id });
+      if (confirm(g.lists.length ? `Gruppe „${g.name}“ löschen? Ihre ${g.lists.length} Einträge wandern in die Gruppe darüber.` : `Gruppe „${g.name}“ löschen?`)) commit({ t: 'delGroup', g: g.id });
       break;
     }
     case 'groupUp': commit({ t: 'moveGroup', g: el.dataset.g, dir: -1 }); break;
@@ -1592,7 +1592,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 38;
+const APP_VERSION = 39;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
