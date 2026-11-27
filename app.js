@@ -873,7 +873,30 @@ function contactsHtml(id, sid, T) {
       ${c.address ? `<a class="tlink" href="https://maps.apple.com/?address=${encodeURIComponent(c.address)}&q=${encodeURIComponent(c.name || c.address)}" target="_blank" rel="noopener">${I.mappin || ''}${esc(c.address)}</a>` : ''}
       ${c.web ? `<a class="tlink" href="${link(c.web)}" target="_blank" rel="noopener">${I.link || ''}Webseite</a>` : ''}
       ${c.note ? `<div class="cnote">${esc(c.note)}</div>` : ''}</div>`).join('')
-    + (ed === -1 ? form(-1) : `<button class="tlink tadd" data-act="cEdit" data-st="${sid}" data-k="-1">${I.plus || '+'} Kontakt hinzufügen</button>`);
+    + (ed === -1 ? form(-1) : `<button class="tlink tadd" data-act="cEdit" data-st="${sid}" data-k="-1">${I.plus || '+'} Kontakt hinzufügen</button>
+      <label class="tlink filebtn">${I.user || ''}<input type="file" accept=".vcf,text/vcard,text/x-vcard" data-vcf="${id}" data-st="${sid}"> Aus dem Adressbuch importieren (.vcf)</label>`);
+}
+/* vCard (.vcf) lesen – so teilt das iPhone einen Kontakt („Kontakt teilen“) */
+function parseVcf(txt) {
+  const lines = txt.replace(/\r\n|\r/g, '\n').replace(/\n[ \t]/g, '').split('\n'), out = []; let c = null;
+  const val = v => v.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1').trim();
+  for (const ln of lines) {
+    const m = ln.match(/^(?:item\d+\.)?([A-Z-]+)((?:;[^:]*)?):(.*)$/i); if (!m) continue;
+    const key = m[1].toUpperCase(), params = m[2].toUpperCase(); let v = m[3];
+    if (/ENCODING=QUOTED-PRINTABLE/.test(params)) { try { v = decodeURIComponent(v.replace(/=([0-9A-F]{2})/gi, '%$1')); } catch (e) {} }
+    if (key === 'BEGIN') c = {}; else if (key === 'END') { if (c && (c.name || c.phone || c.email)) out.push(c); c = null; }
+    else if (!c) continue;
+    else if (key === 'FN') c.name = val(v);
+    else if (key === 'N' && !c.name) c.name = val(v.split(';').slice(0, 2).reverse().join(' '));
+    else if (key === 'ORG') { const o = val(v.split(';')[0]); if (o) { if (!c.name) c.name = o; else if (c.name !== o) c.role = c.role ? c.role : o; } }
+    else if (key === 'TITLE' && !c.role) c.role = val(v);
+    else if (key === 'TEL' && !c.phone) c.phone = val(v.replace(/^tel:/i, ''));
+    else if (key === 'EMAIL' && !c.email) c.email = val(v);
+    else if (key === 'ADR' && !c.address) { const a = v.split(';').map(val); const adr = [a[2], [a[5], a[3]].filter(Boolean).join(' '), a[6] && !/deutschland|germany/i.test(a[6]) ? a[6] : ''].filter(Boolean).join(', '); if (adr) c.address = adr; }
+    else if (key === 'URL' && !c.web) c.web = val(v);
+    else if (key === 'NOTE' && !c.note) c.note = val(v);
+  }
+  return out;
 }
 const stDelBtn = sid => stDel === sid ? `<button class="secondary danger" data-act="delStationYes" data-st="${sid}">Station wirklich löschen</button>` : `<button class="textbtn" data-act="delStation" data-st="${sid}" style="color:var(--danger, #B91C1C)">Station löschen</button>`;
 
@@ -1556,6 +1579,16 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('change', async e => {
   if (e.target.matches('input[data-photo]')) { const f = e.target.files && e.target.files[0]; if (f) setTripPhoto(e.target.dataset.photo, e.target.dataset.st, f); return; }
+  if (e.target.matches('input[data-vcf]')) {
+    const f = e.target.files && e.target.files[0], id = e.target.dataset.vcf, sid = e.target.dataset.st; if (!f) return;
+    const cs = parseVcf(await f.text()); e.target.value = '';
+    if (!cs.length) { toast('In der Datei wurde kein Kontakt gefunden'); return; }
+    const T = stationsOf(id).find(y => y.id === sid) || {}, all = [...(T.contacts || []), ...cs];
+    commit({ t: 'setStation', l: id, s: sid, patch: { contacts: all } });
+    cEdit = cs.length === 1 ? { id, sid, k: all.length - 1 } : null; render(); // einzelnen Kontakt gleich zum Ergänzen öffnen (z. B. „Wofür“)
+    toast(cs.length === 1 ? `„${cs[0].name || 'Kontakt'}“ importiert – „Wofür“ ergänzen und speichern` : `${cs.length} Kontakte importiert`);
+    return;
+  }
   if (e.target.matches('input[data-docs]')) { const fs = [...(e.target.files || [])]; if (fs.length) addTripDocs(e.target.dataset.docs, e.target.dataset.st, fs); return; }
   if (e.target.matches('[data-st][data-trip]')) {
     const r = route(); if (!view.lists[r.id]) return;
@@ -1644,7 +1677,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 44;
+const APP_VERSION = 45;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
