@@ -680,7 +680,7 @@ async function fillFromPdf(id, sid, file) {
   try {
     const S = stationsOf(id), multi = S.length > 1, T = S.find(y => y.id === sid) || {};
     const x = parseNotes(await pdfText(file), T.name || meta(id).name), patch = {}, got = [], diff = [];
-    const names = { place: 'Ort', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', booking: 'Buchungsnummer', price: 'Gesamtpreis', phone: 'Telefon', email: 'E-Mail', accom: 'Unterkunft', url: 'Buchungsseite' };
+    const names = { place: 'Ort', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', room: 'Zimmer', booking: 'Buchungsnummer', price: 'Gesamtpreis', phone: 'Telefon', email: 'E-Mail', accom: 'Unterkunft', url: 'Buchungsseite' };
     Object.keys(names).forEach(k => { if (!x[k]) return; if (!T[k]) { patch[k] = x[k]; got.push(names[k]); } else if (!sameVal(k, T[k], x[k])) diff.push({ k, label: names[k], old: T[k], neu: x[k] }); });
     if (multi && x.hotel && (!T.name || T.name === 'Neue Station')) { const city = (x.place || '').match(/\d{5}\s+([^,]+)$/); patch.name = city ? city[1].trim() : x.hotel; got.unshift('Name'); }
     if (got.length) { commit({ t: 'setStation', l: id, s: sid, patch }); if (patch.place) geocode(id, sid, patch.place, true); toast('Aus dem PDF übernommen: ' + got.join(', ')); }
@@ -738,12 +738,14 @@ function parseNotes(txt, tripName) {
   if (an && dOf(an[1])) out.from = dOf(an[1]); if (ab && dOf(ab[1])) out.to = dOf(ab[1]);
   const adr = [...t.matchAll(/([A-ZÄÖÜ][\wäöüß.\- ]*?(?:straße|strasse|str\.|weg|platz|damm|allee|gasse|ring|ufer)\s*[\d][\w\-–]*)\s*,?\s*(\d{5}\s+[A-ZÄÖÜ][\wäöüß\- ]+)/gi)].map(m => `${m[1].trim()}, ${m[2].trim()}`);
   if (adr.length) out.place = adr.find(a => tripName && a.toLowerCase().includes(tripName.toLowerCase())) || adr.find(a => !/postanschrift/i.test(a)) || adr[0];
+  const room = t.match(/(?:Zimmerkategorie|Zimmertyp|Zimmerart|Kategorie|Apartment|Wohnung)[^\S\n]*:[^\S\n]*([^\n]{3,70})/i) || t.match(/(?:Objekt|Unterkunft)\s*\[([^\]]{3,60})\]/i);
+  if (room) out.room = room[1].trim();
   const hotel = t.match(/(?:^|\n)[^\S\n]*(?:Hotel|Unterkunft)[^\S\n]*:[^\S\n]*([^\n]{3,60})/i); if (hotel) out.hotel = hotel[1].trim().replace(/^\[|\]$/g, '');
   if (out.place && out.hotel && !out.place.toLowerCase().includes(out.hotel.toLowerCase())) out.place = `${out.hotel}, ${out.place}`;
   return out;
 }
 let tripEdit = null; const geoTried = new Set();
-const ST_FIELDS = ['name', 'place', 'lat', 'lon', 'url', 'accom', 'guest', 'booking', 'price', 'phone', 'email', 'photo', 'docs', 'to'];
+const ST_FIELDS = ['name', 'room', 'place', 'lat', 'lon', 'url', 'accom', 'guest', 'booking', 'price', 'phone', 'email', 'photo', 'docs', 'to'];
 /* Stationen einer Reise (ältere Reisen ohne Stationsliste gelten als eine Station „s0“) */
 function stationsOf(id) {
   const L = view.lists[id] || {}, T = L.trip || {};
@@ -804,11 +806,12 @@ function vStation(id, sid) {
   if (ed && multi) parts.push(tcard('mappin', 'Station', inp('name', 'Name der Station', 'text', 'z. B. Hamburg') + `<button class="kindbtn ${main && main.id === sid ? 'task' : ''}" data-act="mainStation" data-st="${sid}">★ Hauptstation${main && main.id === sid ? '' : ' machen'}</button>`));
   if (ed) parts.push(tcard('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>${multi ? 'Anreise' : 'Abreise'}</span><input type="date" data-st="${sid}" data-trip="from" value="${esc(T.from || '')}"></label><label class="tfield"><span>${multi ? 'Abreise' : 'Rückkehr'}</span><input type="date" data-st="${sid}" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
   if (ed || T.place) parts.push(tcard('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" data-st="${sid}" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.mappin || ''}In Apple Karten</a>`));
-  if (ed || T.url || T.accom || T.guest || T.booking || T.price || T.phone || T.email) parts.push(tcard('ticket', 'Buchung', ed
-    ? inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
+  if (ed || T.url || T.accom || T.guest || T.booking || T.room || T.price || T.phone || T.email) parts.push(tcard('ticket', 'Buchung', ed
+    ? inp('room', 'Zimmer / Kategorie', 'text', 'z. B. Doppelzimmer mit Balkon') + inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('guest', 'Gäste-App (Link)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
     : `${T.accom ? `<a class="tlink" href="${link(T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
        ${T.url ? `<a class="tlink" href="${link(T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
        ${T.guest ? `<a class="tlink" href="${link(T.guest)}" target="_blank" rel="noopener">${I.link || ''}Gäste-App öffnen</a>` : ''}
+       ${T.room ? `<div class="tline">Zimmer <b>${esc(T.room)}</b></div>` : ''}
        ${T.booking ? `<div class="tline">Buchungsnummer <b>${esc(T.booking)}</b></div>` : ''}
        ${T.price ? `<div class="tline">Gesamtpreis <b>${esc(T.price)}</b></div>` : ''}
        ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}
@@ -1388,7 +1391,7 @@ document.addEventListener('click', e => {
     case 'notesFill': {
       const L = view.lists[id], sid = el.dataset.st, S = stationsOf(id), T = S.find(y => y.id === sid) || {}, multi = S.length > 1;
       const x = parseNotes((L.trip || {}).notes || '', T.name || meta(id).name), patch = {}, got = [];
-      const names = { email: 'E-Mail', url: 'Buchungsseite', accom: 'Unterkunft', phone: 'Telefon', booking: 'Buchungsnummer', price: 'Gesamtpreis', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', place: 'Ort' };
+      const names = { email: 'E-Mail', url: 'Buchungsseite', accom: 'Unterkunft', phone: 'Telefon', room: 'Zimmer', booking: 'Buchungsnummer', price: 'Gesamtpreis', from: multi ? 'Anreise' : 'Abreise', to: multi ? 'Abreise' : 'Rückkehr', place: 'Ort' };
       Object.keys(names).forEach(k => { if (x[k] && !T[k]) { patch[k] = x[k]; got.push(names[k]); } });
       if (Object.keys(patch).length) commit({ t: 'setStation', l: id, s: sid, patch });
       if (patch.place) geocode(id, sid, patch.place, true);
@@ -1589,7 +1592,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 37;
+const APP_VERSION = 38;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
