@@ -695,8 +695,8 @@ function vTrip(id) {
   const docs = T.docs || [];
   parts.push(card('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
     + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}">${I.plus || '+'} Dokument hinzufügen</label>`));
-  if (ed || T.notes) parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>${T.notes ? `<button class="tlink" data-act="notesFill" style="border:0;background:none;padding:0">${I.link ? '' : ''}↑ Leere Felder aus den Notizen füllen</button>` : ''}` : `<div class="tnotesview">${esc(T.notes)}</div>`));
-  if (!ed && !T.place && !T.url && !T.accom && !T.guest && !T.booking && !T.price && !T.phone && !T.email && !T.notes) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
+  parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>${T.notes ? `<button class="tlink" data-act="notesFill" style="border:0;background:none;padding:0">${I.link ? '' : ''}↑ Leere Felder aus den Notizen füllen</button>` : ''}` : `<textarea class="tnotesview" data-trip="notes" rows="1" placeholder="Notiz hinzufügen …" aria-label="Notizen">${esc(T.notes || '')}</textarea>`));
+  if (false) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
   const photo = tripPhoto(id);
   if (T.place && !T.lat && !geoTried.has(id) && connected()) { geoTried.add(id); setTimeout(() => geocode(id, T.place, true), 0); }
   return `<div class="screen">
@@ -1083,7 +1083,7 @@ function route() {
   return { v: 'home' };
 }
 let lastRouteKey = '';
-function autosize(root = document) { root.querySelectorAll('textarea[data-act]').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }); }
+function autosize(root = document) { root.querySelectorAll('textarea[data-act], textarea[data-trip]').forEach(t => { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }); }
 document.addEventListener('input', e => {
   if (e.target.matches('input[data-emo]')) {
     const v = firstEmo(e.target.value); if (!v) return;
@@ -1092,7 +1092,7 @@ document.addEventListener('input', e => {
     else { const f = findItem(view.lists[r.id], e.target.dataset.i); if (f) { itemPick = null; commit({ t: 'editItem', l: r.id, i: f.item.id, patch: { icon: v } }); } }
     return;
   }
-  if (e.target.matches('textarea[data-act]')) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; } });
+  if (e.target.matches('textarea[data-act], textarea[data-trip]')) { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; } });
 function applyTheme(r) {
   const st = document.documentElement.style, m = r.id && meta(r.id);
   const keys = ['--accent', '--accent-dark', '--accent-soft', '--bg', '--sel'];
@@ -1431,7 +1431,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 31;
+const APP_VERSION = 32;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
