@@ -1095,10 +1095,11 @@ let iconPick = null, itemPick = null, itemMenu = null, reserveOpen = false, move
 /* Weitere Punkte: abgewählte Punkte dieser Liste und Punkte der Vorlage, die hier noch fehlen */
 function reserveHtml(id) {
   const L = view.lists[id], T = id !== TPL && view.lists[TPL];
-  const have = new Set(allItems(L).map(it => it.text.trim().toLowerCase()));
+  const key = it => it.text.trim().toLowerCase() + '|' + (it.resp || ''); // gleicher Name mit anderer Zuständigkeit zählt als eigener Punkt
+  const have = new Set(allItems(L).map(key));
   const bySec = new Map(); const put = (title, row) => { const k = title || ''; if (!bySec.has(k)) bySec.set(k, []); bySec.get(k).push(row); };
   L.sections.forEach(s => s.items.filter(it => !isSel(it)).forEach(it => put(s.title, { act: 'selItem', i: it.id, it })));
-  if (T) T.sections.forEach(s => s.items.filter(it => !have.has(it.text.trim().toLowerCase())).forEach(it => put(s.title, { act: 'addFromTpl', i: it.id, it })));
+  if (T) T.sections.forEach(s => s.items.filter(it => !have.has(key(it))).forEach(it => put(s.title, { act: 'addFromTpl', i: it.id, it })));
   const n = [...bySec.values()].reduce((a, r) => a + r.length, 0);
   if (!n) return '';
   return `<section class="group reserve"><button class="reservehead" data-act="reserveToggle">
@@ -1592,7 +1593,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 39;
+const APP_VERSION = 40;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
