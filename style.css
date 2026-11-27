@@ -294,3 +294,7 @@ button.callink { font: inherit; font-size: 15px; font-weight: 600; cursor: point
 
 /* Zurück/Weiter ausgeblendet: Blättern per Wischen (die Knöpfe bleiben unsichtbar für das Wischen erhalten) */
 .later.navhidden { display: none; }
+
+/* Abschnitt: Knopf beim Packen „Eingepackt“ oder „Erledigt“ */
+.kindbtn { flex: none; display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 10px; border: 1.5px solid var(--accent); border-radius: 15px; background: var(--card); color: var(--accent); font-size: 13px; font-weight: 600; }
+.kindbtn.task { background: var(--accent); color: #fff; }

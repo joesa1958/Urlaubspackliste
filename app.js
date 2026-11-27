@@ -259,6 +259,7 @@ function applyOp(doc, op) {
   switch (op.t) {
     case 'addSection': if (!sec(op.sec.id)) L.sections.push({ ...op.sec, items: [] }); break;
     case 'renameSection': { const s = sec(op.s); if (s) s.title = op.title; break; }
+    case 'secKind': { const x = L.sections.find(y => y.id === op.s); if (x) { if (op.task) x.task = true; else delete x.task; } break; }
     case 'delSection': {
       const i = L.sections.findIndex(s => s.id === op.s);
       if (i >= 0 && L.sections.length > 1) { const [s] = L.sections.splice(i, 1); if (!op.withItems) (L.sections[Math.max(0, i - 1)]).items.push(...s.items); }
@@ -652,7 +653,7 @@ function vRun(id) {
     <div class="current wheelwrap">
       <div class="wheel${shift ? ' roll' : ''}" style="--from:${shift * 46}px">${slots}</div>
     </div>
-    <button class="done-btn" data-act="runDone" data-i="${cur.it.id}">${I.tick(22, '#fff', 2)} Eingepackt</button>
+    <button class="done-btn" data-act="runDone" data-i="${cur.it.id}">${I.tick(22, '#fff', 2)} ${(view.lists[id].sections.find(x => x.items.some(y => y.id === cur.it.id)) || {}).task ? 'Erledigt' : 'Eingepackt'}</button>
     <div class="runlinks">
       <button class="later navhidden" aria-hidden="true" tabindex="-1" data-act="runBack" ${st.rest.length > 1 ? '' : 'disabled style="opacity:.4"'}>${I.back} Zurück</button>
       <button class="later navhidden" aria-hidden="true" tabindex="-1" data-act="runLater" data-i="${cur.it.id}" ${st.rest.length > 1 ? '' : 'disabled style="opacity:.4"'}>Weiter ›</button>
@@ -729,6 +730,7 @@ function vEdit(id) {
   const secs = L.sections.filter(s => !filt || !s.items.length || shown(s).length).map((s, si) => `<section class="group" data-s="${s.id}">
     <div class="grouphead">
       <input class="sectitle" data-act="secTitle" data-s="${s.id}" value="${esc(s.title)}" placeholder="${L.sections.length > 1 ? 'Abschnitt benennen' : 'Abschnitt (optional)'}" aria-label="Name des Abschnitts" enterkeyhint="done">
+      <button class="kindbtn ${s.task ? 'task' : ''}" data-act="secKind" data-s="${s.id}" aria-label="Knopf beim Packen: ${s.task ? 'Erledigt' : 'Eingepackt'} – antippen zum Wechseln">${I.tick(13, 'currentColor', 2.6)} ${s.task ? 'Erledigt' : 'Eingepackt'}</button>
       ${L.sections.length > 1 ? `<button class="smallbtn" data-act="delSection" data-s="${s.id}">Abschnitt löschen</button>` : ''}
     </div>
     ${secDel === s.id ? `<div class="secdel">
@@ -1071,6 +1073,7 @@ document.addEventListener('click', e => {
       document.body.appendChild(ov); break;
     }
     case 'calAdd': case 'calShare': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) calAdd(f.item, meta(r.id).name, act === 'calShare'); break; }
+    case 'secKind': { const x = view.lists[id].sections.find(y => y.id === el.dataset.s); if (x) { commit({ t: 'secKind', l: id, s: x.id, task: !x.task }); toast(`„${x.title || 'Abschnitt'}“: Knopf heißt jetzt „${x.task ? 'Eingepackt' : 'Erledigt'}“`); } break; }
     case 'clearDue': { const f = findItem(view.lists[id], el.dataset.i); if (f) commit({ t: 'editItem', l: id, i: f.item.id, patch: { due: '' } }); break; }
     case 'reserveToggle': reserveOpen = !reserveOpen; render(); break;
     case 'unselItem': { const f = findItem(view.lists[id], el.dataset.i); if (f) { commit({ t: 'editItem', l: id, i: f.item.id, patch: { sel: false } }); toast(`„${f.item.text}“ herausgenommen – unten wieder hinzufügbar`); } break; }
@@ -1222,7 +1225,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
