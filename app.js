@@ -27,6 +27,9 @@ const fmtTime = ts => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit'
 
 /* ---------- Icons ---------- */
 const I = {
+  mail: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 6h17v12h-17zM3.5 6.5l8.5 6.5 8.5-6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  camera: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2.5h6L17 8h3v11H4zM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  file: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h7.5l4 4v13h-11.5zM13.5 3.5V8h4.5M9.5 12.5h5M9.5 16h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   mappin: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   ticket: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8V6.5h17V8a2 2 0 0 0 0 4v0a2 2 0 0 0 0 4v1.5h-17V16a2 2 0 0 0 0-4 2 2 0 0 0 0-4zM14.5 6.5v11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   note: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h9l3.5 3.5v13.5H6zM9 10h6.5M9 13.5h6.5M9 17h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -416,6 +419,20 @@ async function dbxDownload(path = DATA_PATH) {
   }
   return { data, rev };
 }
+const dbxArg = o => JSON.stringify(o).replace(/[\u007f-￿]/g, c => '\\u' + ('000' + c.charCodeAt(0).toString(16)).slice(-4));
+async function dbxPutFile(path, blob) {
+  const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST',
+    headers: { Authorization: 'Bearer ' + await accessToken(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': dbxArg({ path, mode: 'add', autorename: true, mute: true }) }, body: blob });
+  if (!r.ok) throw new Error('Hochladen fehlgeschlagen (' + r.status + ')'); return r.json();
+}
+async function dbxGetFile(path) {
+  const r = await fetch('https://content.dropboxapi.com/2/files/download', { method: 'POST', headers: { Authorization: 'Bearer ' + await accessToken(), 'Dropbox-API-Arg': dbxArg({ path }) } });
+  if (!r.ok) throw new Error('Laden fehlgeschlagen (' + r.status + ')'); return r.blob();
+}
+async function dbxApi(ep, body) {
+  const r = await fetch('https://api.dropboxapi.com/2/' + ep, { method: 'POST', headers: { Authorization: 'Bearer ' + await accessToken(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error('Dropbox (' + r.status + ')'); return r.json();
+}
 async function dbxUpload(doc, rev) {
   const mode = rev ? { '.tag': 'update', update: rev } : { '.tag': 'add' };
   const r = await fetch('https://content.dropboxapi.com/2/files/upload', {
@@ -568,15 +585,70 @@ function tripRel(from, to) {
   const d2 = b ? Math.round((new Date(b[0], b[1] - 1, b[2]) - t0) / 864e5) : d1;
   if (d1 > 1) return `in ${d1} Tagen`; if (d1 === 1) return 'morgen'; if (d2 >= 0) return 'läuft'; return 'vorbei';
 }
-async function geocode(id, place) {
+async function geocode(id, place, quiet) {
+  // erst die ganze Angabe, dann ohne Hausnummer-Bereiche, dann schrittweise ohne die vorderen Teile (z. B. Name der Unterkunft)
+  const parts = place.split(',').map(x => x.trim()).filter(Boolean), tries = [place, place.replace(/(\d+)\s*[-–]\s*\d+/g, '$1')];
+  for (let k = 1; k < parts.length; k++) tries.push(parts.slice(k).join(', '));
   try {
-    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=de&q=' + encodeURIComponent(place));
-    const j = await r.json(); const L = view.lists[id];
-    if (j && j[0] && L && L.trip && L.trip.place === place) commit({ t: 'setTrip', l: id, patch: { lat: +(+j[0].lat).toFixed(5), lon: +(+j[0].lon).toFixed(5) } });
-    else if (!j || !j[0]) toast('Ort nicht auf der Karte gefunden – die Route funktioniert trotzdem');
-  } catch (e) { /* ohne Netz: nur ohne Karte */ }
+    for (const q of [...new Set(tries)]) {
+      const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=de&q=' + encodeURIComponent(q));
+      const j = await r.json(); const L = view.lists[id];
+      if (j && j[0]) { if (L && L.trip && L.trip.place === place) commit({ t: 'setTrip', l: id, patch: { lat: +(+j[0].lat).toFixed(5), lon: +(+j[0].lon).toFixed(5) } }); return; }
+    }
+    if (!quiet) toast('Ort nicht auf der Karte gefunden – die Route funktioniert trotzdem');
+  } catch (e) { if (!quiet) toast('Karte gerade nicht erreichbar'); }
 }
-let tripEdit = null;
+/* Titelbild und Dokumente einer Reise: liegen in der Dropbox unter /reisen/<Liste>/ */
+const photoBusy = new Set();
+function tripPhoto(id) {
+  const T = (view.lists[id] || {}).trip || {}; if (!T.photo) return '';
+  const c = (() => { try { return localStorage.getItem(LS + 'foto:' + T.photo); } catch (e) { return null; } })();
+  if (c) return c;
+  if (!photoBusy.has(T.photo) && connected()) {
+    photoBusy.add(T.photo);
+    dbxGetFile(T.photo).then(b => new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); }))
+      .then(u => { try { localStorage.setItem(LS + 'foto:' + T.photo, u); } catch (e) {} render(); }).catch(() => {});
+  }
+  return '';
+}
+async function shrinkImage(file, max = 1400) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
+  } finally { URL.revokeObjectURL(url); }
+}
+async function setTripPhoto(id, file) {
+  toast('Foto wird hochgeladen …');
+  try {
+    const blob = await shrinkImage(file), meta_ = await dbxPutFile(`/reisen/${id}/titelbild.jpg`, blob);
+    const old = ((view.lists[id] || {}).trip || {}).photo;
+    commit({ t: 'setTrip', l: id, patch: { photo: meta_.path_display || meta_.path_lower } });
+    if (old && old !== meta_.path_display) dbxApi('files/delete_v2', { path: old }).catch(() => {});
+    toast('Titelbild gespeichert');
+  } catch (e) { toast(e.message || 'Foto konnte nicht gespeichert werden'); }
+}
+async function addTripDocs(id, files) {
+  for (const f of files) {
+    toast(`„${f.name}“ wird hochgeladen …`);
+    try {
+      const m = await dbxPutFile(`/reisen/${id}/${f.name.replace(/[\\/:*?"<>|]+/g, '_')}`, f);
+      const docs = [...((view.lists[id].trip || {}).docs || []), { name: m.name, path: m.path_display || m.path_lower, size: m.size, added: new Date().toISOString().slice(0, 10) }];
+      commit({ t: 'setTrip', l: id, patch: { docs } });
+      toast(`„${m.name}“ gespeichert`);
+    } catch (e) { toast(e.message || 'Hochladen fehlgeschlagen'); }
+  }
+}
+async function openTripDoc(id, path) {
+  const w = window.open('', '_blank'); // sofort öffnen, sonst blockiert das iPhone das Fenster
+  try { const j = await dbxApi('files/get_temporary_link', { path }); if (w) w.location.href = j.link; else location.href = j.link; }
+  catch (e) { if (w) w.close(); toast('Dokument nicht erreichbar – besteht eine Verbindung?'); }
+}
+let docDel = null;
+let tripEdit = null; const geoTried = new Set();
 function vTrip(id) {
   const m = meta(id), L = view.lists[id], T = L.trip || {}, ed = tripEdit === id;
   const st = runState(id), items = allItems(L), rel = tripRel(L.date, T.to);
@@ -587,22 +659,32 @@ function vTrip(id) {
   const map = T.lat ? `<a class="tmap" href="${apple}" target="_blank" rel="noopener" aria-label="Ort in Apple Karten öffnen"><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=${T.lon - 0.04},${T.lat - 0.018},${T.lon + 0.04},${T.lat + 0.018}&layer=mapnik&marker=${T.lat},${T.lon}" loading="lazy" tabindex="-1" title="Karte"></iframe></a>` : '';
   const packed = st.total ? `${st.doneCount} von ${st.total} erledigt` : items.length ? 'noch nichts ausgewählt' : 'noch leer';
   const parts = [];
+  if (ed) parts.push(card('camera', 'Titelbild', `<label class="tlink filebtn"><input type="file" accept="image/*" data-photo="${id}">${I.camera || ''}${T.photo ? 'Anderes Foto wählen' : 'Foto wählen'}</label>${T.photo ? `<button class="textbtn" data-act="photoDel">Foto entfernen</button>` : ''}`));
   if (ed) parts.push(card('cal', 'Zeitraum', `<div class="trow2"><label class="tfield"><span>Abreise</span><input type="date" data-tripdate="from" value="${esc(L.date || '')}"></label><label class="tfield"><span>Rückkehr</span><input type="date" data-trip="to" value="${esc(T.to || '')}"></label></div>`));
-  if (ed || T.place) parts.push(card('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Campingplatz, Ort') : `${map}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.route || ''}Route in Apple Karten</a>`));
-  if (ed || T.url || T.booking || T.phone) parts.push(card('ticket', 'Buchung', ed
-    ? inp('url', 'Buchungsseite (Adresse)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('phone', 'Telefon', 'tel')
-    : `${T.url ? `<a class="tlink" href="${esc(/^https?:/i.test(T.url) ? T.url : 'https://' + T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
+  if (ed || T.place) parts.push(card('mappin', 'Ort', ed ? inp('place', 'Ort oder Adresse', 'text', 'Unterkunft, Straße, Ort') : `${map}${!T.lat ? `<button class="textbtn" data-act="geoRetry" style="padding-left:0">Karte suchen</button>` : ''}<div class="tplace">${esc(T.place)}</div><a class="tlink" href="${apple}" target="_blank" rel="noopener">${I.route || ''}Route in Apple Karten</a>`));
+  if (ed || T.url || T.accom || T.booking || T.price || T.phone || T.email) parts.push(card('ticket', 'Buchung', ed
+    ? inp('accom', 'Unterkunft (Webseite)', 'url', 'https://…') + inp('url', 'Buchungsseite (Webseite)', 'url', 'https://…') + inp('booking', 'Buchungsnummer') + inp('price', 'Gesamtpreis', 'text', 'EUR 1.234,-') + inp('phone', 'Telefon', 'tel') + inp('email', 'E-Mail', 'email')
+    : `${T.accom ? `<a class="tlink" href="${esc(/^https?:/i.test(T.accom) ? T.accom : 'https://' + T.accom)}" target="_blank" rel="noopener">${I.link || ''}Unterkunft ansehen</a>` : ''}
+       ${T.url ? `<a class="tlink" href="${esc(/^https?:/i.test(T.url) ? T.url : 'https://' + T.url)}" target="_blank" rel="noopener">${I.link || ''}Buchungsseite öffnen</a>` : ''}
        ${T.booking ? `<div class="tline">Buchungsnummer <b>${esc(T.booking)}</b></div>` : ''}
-       ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}`));
+       ${T.price ? `<div class="tline">Gesamtpreis <b>${esc(T.price)}</b></div>` : ''}
+       ${T.phone ? `<a class="tlink" href="tel:${esc(T.phone.replace(/[^\d+]/g, ''))}">${I.phone || ''}${esc(T.phone)} anrufen</a>` : ''}
+       ${T.email ? `<a class="tlink" href="mailto:${esc(T.email)}">${I.mail || ''}${esc(T.email)}</a>` : ''}`));
   if (dues.length) parts.push(card('cal', 'Termine', dues.map(it => `<div class="tdue"><div><div class="tline">${esc(it.text)}</div>${dueBadge(it.due)}</div>${calLink(it, m.name)}</div>`).join('')));
   else if (ed) parts.push(card('cal', 'Termine', `<p class="hint" style="margin:0">Termine setzt du an einzelnen Punkten der Packliste (Bearbeiten › Kopier-Symbol mit „T“). Sie erscheinen dann hier.</p>`));
   parts.push(`<a class="tcard tpack" href="#/liste/${id}" data-act="openList" data-l="${id}"><div class="tch">${I.suitcase}<span>Packliste</span></div>
     <div class="tpackrow"><span>${packed}</span>${I.chev}</div>${st.total ? `<div class="tprog"><div style="width:${Math.round(st.doneCount / st.total * 100)}%"></div></div>` : ''}</a>`);
+  const docs = T.docs || [];
+  parts.push(card('file', 'Dokumente', docs.map((d, k) => `<div class="tdoc"><button class="tdocopen" data-act="docOpen" data-k="${k}">${I.file || ''}<span>${esc(d.name)}</span></button>${ed ? (docDel === k ? `<button class="smallbtn" data-act="docDelYes" data-k="${k}">Wirklich löschen</button>` : `<button class="textbtn" data-act="docDel" data-k="${k}">Löschen</button>`) : ''}</div>`).join('')
+    + `<label class="tlink filebtn"><input type="file" multiple accept="application/pdf,image/*,.pdf,.doc,.docx,.txt" data-docs="${id}">${I.plus || '+'} Dokument hinzufügen</label>`));
   if (ed || T.notes) parts.push(card('note', 'Notizen', ed ? `<textarea class="tnotes" data-trip="notes" rows="5" placeholder="Fährzeiten, Tipps, WLAN …">${esc(T.notes || '')}</textarea>` : `<div class="tnotesview">${esc(T.notes)}</div>`));
-  if (!ed && !T.place && !T.url && !T.booking && !T.phone && !T.notes) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
+  if (!ed && !T.place && !T.url && !T.accom && !T.booking && !T.price && !T.phone && !T.email && !T.notes) parts.push(`<p class="hint" style="text-align:center">Tippe oben auf den Stift, um Zeitraum, Ort, Buchung und Notizen einzutragen.</p>`);
+  const photo = tripPhoto(id);
+  if (T.place && !T.lat && !geoTried.has(id) && connected()) { geoTried.add(id); setTimeout(() => geocode(id, T.place, true), 0); }
   return `<div class="screen">
-    <header class="top">${topBar('#/', 'Reisen', refreshBtn() + (ed ? `<button class="textbtn strong" data-act="tripEdit">Fertig</button>` : `<button class="iconbtn" data-act="tripEdit" aria-label="Reise bearbeiten">${I.edit}</button>`))}
-      <div class="ttitle">${listIcon(m.icon, m.color)}<div><h1>${esc(m.name)}</h1>${L.date ? `<div class="sub">${rangeText(L.date, T.to)}${rel ? ` · <b>${rel}</b>` : ''}</div>` : ''}</div></div></header>
+    <header class="hero trip ${photo ? '' : 'nophoto'}" style="--herobg:${FARBEN[m.color][1]}">${photo ? `<img src="${photo}" alt="">` : ''}<div class="inner">
+      <div class="bar"><a class="back" href="#/">${I.back}Reisen</a><div class="icons">${refreshBtn()}${ed ? `<button class="iconbtn txt" data-act="tripEdit">Fertig</button>` : `<button class="iconbtn" data-act="tripEdit" aria-label="Reise bearbeiten">${I.edit}</button>`}</div></div>
+      <div><h1>${esc(m.name)}</h1>${L.date ? `<div class="herosub">${rangeText(L.date, T.to)}${rel ? ` · <b>${rel}</b>` : ''}</div>` : ''}</div></div></header>
     <main class="content">${parts.join('')}</main>
     <a class="foot" href="#/einstellungen" data-status></a>
   </div>`;
@@ -1142,7 +1224,16 @@ document.addEventListener('click', e => {
       document.body.appendChild(ov); break;
     }
     case 'calAdd': case 'calShare': { const r = route(), f = findItem(view.lists[r.id], el.dataset.i); if (f) calAdd(f.item, meta(r.id).name, act === 'calShare'); break; }
-    case 'tripEdit': tripEdit = tripEdit === id ? null : id; render(); break;
+    case 'tripEdit': tripEdit = tripEdit === id ? null : id; docDel = null; render(); break;
+    case 'geoRetry': { const T = view.lists[id].trip || {}; if (T.place) { toast('Suche den Ort …'); geocode(id, T.place); } break; }
+    case 'photoDel': { const T = view.lists[id].trip || {}; if (T.photo) { dbxApi('files/delete_v2', { path: T.photo }).catch(() => {}); commit({ t: 'setTrip', l: id, patch: { photo: '' } }); } break; }
+    case 'docOpen': { const d = ((view.lists[id].trip || {}).docs || [])[+el.dataset.k]; if (d) openTripDoc(id, d.path); break; }
+    case 'docDel': docDel = +el.dataset.k; render(); break;
+    case 'docDelYes': {
+      const docs = [...((view.lists[id].trip || {}).docs || [])], d = docs[+el.dataset.k]; docDel = null;
+      if (d) { docs.splice(+el.dataset.k, 1); commit({ t: 'setTrip', l: id, patch: { docs: docs.length ? docs : '' } }); dbxApi('files/delete_v2', { path: d.path }).catch(() => {}); toast(`„${d.name}“ gelöscht`); }
+      break;
+    }
     case 'groupTrip': { const g = view.groups.find(x => x.id === el.dataset.g); if (g) { const on = !isTripGroup(g); commit({ t: 'groupTrip', g: g.id, val: on }); toast(on ? `„${g.name}“: Einträge öffnen jetzt die Reise-Seite` : `„${g.name}“: Einträge öffnen direkt die Liste`); } break; }
     case 'secKind': { const x = view.lists[id].sections.find(y => y.id === el.dataset.s); if (x) { commit({ t: 'secKind', l: id, s: x.id, task: !x.task }); toast(`„${x.title || 'Abschnitt'}“: Knopf heißt jetzt „${x.task ? 'Eingepackt' : 'Erledigt'}“`); } break; }
     case 'clearDue': { const f = findItem(view.lists[id], el.dataset.i); if (f) commit({ t: 'editItem', l: id, i: f.item.id, patch: { due: '' } }); break; }
@@ -1229,6 +1320,8 @@ document.addEventListener('submit', async e => {
   }
 });
 document.addEventListener('change', async e => {
+  if (e.target.matches('input[data-photo]')) { const f = e.target.files && e.target.files[0]; if (f) setTripPhoto(e.target.dataset.photo, f); return; }
+  if (e.target.matches('input[data-docs]')) { const fs = [...(e.target.files || [])]; if (fs.length) addTripDocs(e.target.dataset.docs, fs); return; }
   if (e.target.matches('[data-trip], [data-tripdate]')) {
     const r = route(); if (!view.lists[r.id]) return;
     const v = (e.target.value || '').trim();
@@ -1307,7 +1400,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start ---------- */
 /* Neue Version der Seite erkennen und laden (iPhone hält sonst die alte im Speicher) */
-const APP_VERSION = 27;
+const APP_VERSION = 28;
 async function checkUpdate() {
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });

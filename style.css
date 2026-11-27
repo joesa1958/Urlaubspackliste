@@ -321,3 +321,19 @@ button.callink { font: inherit; font-size: 15px; font-weight: 600; cursor: point
 .tfield input, .tnotes { font: inherit; font-size: 16px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 40px; box-sizing: border-box; width: 100%; }
 .tnotes { min-height: 120px; resize: vertical; }
 .trow2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Reise-Seite: Kopf mit Bild wie die Startseite */
+.hero.trip { height: calc(200px + var(--safe-top)); }
+.hero.trip.nophoto { background: var(--herobg); }
+.hero.trip .back { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.35); }
+.hero.trip .back svg { color: #fff; }
+.hero.trip h1 { margin: 0; font-size: 34px; }
+.hero.trip .herosub { color: #fff; font-size: 16px; text-shadow: 0 1px 4px rgba(0,0,0,.4); margin-top: 2px; }
+.hero.trip .herosub b { font-weight: 700; }
+.hero .iconbtn.txt { width: auto; padding: 0 14px; font-size: 15px; font-weight: 600; border-radius: 18px; }
+.filebtn { cursor: pointer; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.tdoc { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--line); }
+.tdocopen { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 46px; border: 0; background: none; font: inherit; font-size: 16px; color: var(--ink); text-align: left; padding: 0; }
+.tdocopen span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tdocopen svg { flex: none; color: var(--accent); }
